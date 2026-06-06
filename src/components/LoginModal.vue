@@ -13,7 +13,7 @@ const isPhoneLoading = ref(false)
 
 // QR state
 const qrImage = ref('')
-const qrStatus = ref('loading')  // loading | waiting | scanning | confirming | expired | success
+const qrStatus = ref('loading')  // loading | waiting | confirming | expired | success
 const qrKey = ref('')
 let qrTimer = null
 
@@ -34,56 +34,54 @@ function startQrPolling() {
   clearInterval(qrTimer)
   qrTimer = setInterval(async () => {
     if (!qrKey.value) return
-    const { code } = await checkQrStatus(qrKey.value)
-    if (code === 800) {
-      qrStatus.value = 'expired'
-      clearInterval(qrTimer)
-    } else if (code === 801) {
-      qrStatus.value = 'waiting'
-    } else if (code === 802) {
-      qrStatus.value = 'confirming'
-    } else if (code === 803) {
-      qrStatus.value = 'success'
-      clearInterval(qrTimer)
-      await fetchUserProfile()
-      emit('success')
+    try {
+      const { code } = await checkQrStatus(qrKey.value)
+      if (code === 800) {
+        qrStatus.value = 'expired'
+        clearInterval(qrTimer)
+      } else if (code === 801) {
+        qrStatus.value = 'waiting'
+      } else if (code === 802) {
+        qrStatus.value = 'confirming'
+      } else if (code === 803) {
+        qrStatus.value = 'success'
+        clearInterval(qrTimer)
+        await fetchUserProfile()
+        emit('success')
+      }
+    } catch (e) {
+      // 網路錯誤保留下一輪重試，不中斷 polling
+      console.warn('QR polling error, retrying...', e)
     }
   }, 2000)
 }
 
 async function handlePhoneLogin() {
   if (!phone.value.trim() || !password.value.trim()) {
-    phoneError.value = '请填写手机号和密码'
+    phoneError.value = '請填寫手機號和密碼'
     return
   }
   isPhoneLoading.value = true
   phoneError.value = ''
-  const API = 'https://musicapi.acma.cc'
   try {
-    const r = await fetch(
-      `${API}/login/cellphone?phone=${encodeURIComponent(phone.value)}&password=${encodeURIComponent(password.value)}`,
-      { credentials: 'include' }
-    )
-    const d = await r.json()
-    if (d.code === 200) {
-      await fetchUserProfile()
+    // 統一透過 loginWithPhone() 處理，內部使用 md5_password，避免明文密碼出現在 URL
+    const result = await loginWithPhone(phone.value.trim(), password.value)
+    if (result.success) {
       emit('success')
     } else {
-      phoneError.value = d.message || '登录失败，请检查账号密码'
+      phoneError.value = result.message || '登錄失敗，請檢查帳號密碼'
     }
   } catch (e) {
-    phoneError.value = '网络错误，请稍后重试'
+    phoneError.value = '網路錯誤，請稍後重試'
   }
   isPhoneLoading.value = false
 }
 
-// 切換到 QR tab 時初始化
 watch(activeTab, (tab) => {
   if (tab === 'qr') initQr()
   else clearInterval(qrTimer)
 })
 
-// 若默認 tab 為 qr，立即初始化
 if (activeTab.value === 'qr') initQr()
 
 onUnmounted(() => clearInterval(qrTimer))
@@ -92,71 +90,65 @@ onUnmounted(() => clearInterval(qrTimer))
 <template>
   <div class="modal-backdrop" @click.self="emit('close')">
     <div class="modal">
-      <button class="modal-close" @click="emit('close')" aria-label="关闭">✕</button>
-      <h2 class="modal-title">登录</h2>
+      <button class="modal-close" @click="emit('close')" aria-label="關閉">✕</button>
+      <h2 class="modal-title">登入</h2>
 
-      <!-- Tab 切換（手機端隱藏 QR tab） -->
       <div class="login-tabs" v-if="!isMobileDevice()">
         <button :class="['tab-btn', activeTab === 'qr' && 'active']" @click="activeTab = 'qr'">
-          二维码
+          二維碼
         </button>
         <button :class="['tab-btn', activeTab === 'phone' && 'active']" @click="activeTab = 'phone'">
-          手机号
+          手機號
         </button>
       </div>
 
       <!-- 二維碼登入 -->
       <div v-if="activeTab === 'qr'" class="qr-panel">
         <div class="qr-wrap">
-          <img v-if="qrImage && qrStatus !== 'expired'" :src="qrImage" class="qr-img" alt="登录二维码" width="200" height="200" />
-          <div v-if="qrStatus === 'loading'" class="qr-overlay">载入中...</div>
+          <img v-if="qrImage && qrStatus !== 'expired'" :src="qrImage" class="qr-img" alt="登入二維碼" width="200" height="200" />
+          <div v-if="qrStatus === 'loading'" class="qr-overlay">載入中...</div>
           <div v-if="qrStatus === 'expired'" class="qr-overlay expired">
-            <span>二维码已过期</span>
+            <span>二維碼已過期</span>
             <button class="refresh-btn" @click="initQr">刷新</button>
           </div>
           <div v-if="qrStatus === 'confirming'" class="qr-overlay confirming">
-            ✅ 请在手机上确认登录
+            ✅ 請在手機上確認登入
           </div>
         </div>
         <p class="qr-hint">
-          <span v-if="qrStatus === 'waiting'">请使用网易云音乐 App 扫码登录</span>
-          <span v-else-if="qrStatus === 'scanning'">扫码成功，请确认</span>
-          <span v-else-if="qrStatus === 'confirming'">请在 App 中点击「确认登录」</span>
-          <span v-else-if="qrStatus === 'success'">登录成功！</span>
+          <span v-if="qrStatus === 'waiting'">請使用網易雲音樂 App 掃碼登入</span>
+          <span v-else-if="qrStatus === 'confirming'">請在 App 中點擊「確認登入」</span>
+          <span v-else-if="qrStatus === 'success'">登入成功！</span>
         </p>
       </div>
 
       <!-- 手機號登入 -->
       <div v-if="activeTab === 'phone'" class="phone-panel">
         <div class="form-group">
-          <label for="login-phone">手机号</label>
+          <label for="login-phone">手機號</label>
           <input
             id="login-phone"
             v-model="phone"
             type="tel"
-            placeholder="请输入手机号"
+            placeholder="請輸入手機號"
             class="form-input"
             @keyup.enter="handlePhoneLogin"
           />
         </div>
         <div class="form-group">
-          <label for="login-password">密码</label>
+          <label for="login-password">密碼</label>
           <input
             id="login-password"
             v-model="password"
             type="password"
-            placeholder="请输入密码"
+            placeholder="請輸入密碼"
             class="form-input"
             @keyup.enter="handlePhoneLogin"
           />
         </div>
         <p v-if="phoneError" class="form-error">{{ phoneError }}</p>
-        <button
-          class="login-btn"
-          :disabled="isPhoneLoading"
-          @click="handlePhoneLogin"
-        >
-          {{ isPhoneLoading ? '登录中...' : '登录' }}
+        <button class="login-btn" :disabled="isPhoneLoading" @click="handlePhoneLogin">
+          {{ isPhoneLoading ? '登入中...' : '登入' }}
         </button>
       </div>
     </div>
