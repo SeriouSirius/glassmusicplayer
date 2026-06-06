@@ -11,6 +11,11 @@ const isLoggedIn = inject('isLoggedIn')
 const userProfile = inject('userProfile')
 const showLoginModal = inject('showLoginModal')
 const logout = inject('logout')
+
+const todayBadge = (() => {
+  const now = new Date()
+  return `${now.getMonth() + 1}/${now.getDate()}`
+})()
 </script>
 
 <template>
@@ -68,7 +73,6 @@ const logout = inject('logout')
     <div class="nav-section">
       <div class="nav-label">我的音樂</div>
 
-      <!-- 每日推薦：僅登入後顯示 -->
       <div
         v-if="isLoggedIn"
         class="nav-item"
@@ -79,7 +83,7 @@ const logout = inject('logout')
           <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/>
         </svg>
         <span>每日推薦</span>
-        <span class="nav-badge">第{{ new Date().getDate() }}日</span>
+        <span class="nav-badge">{{ todayBadge }}</span>
       </div>
 
       <div class="nav-item" :class="{active: currentView === 'liked'}" @click="navigate('liked')">
@@ -193,10 +197,9 @@ const logout = inject('logout')
   font-weight: 600;
   line-height: 1;
   flex-shrink: 0;
-  color: var(--color-text-muted);
 }
 
-/* 每日推薦：圓形實心 badge */
+/* 每日推薦：圓角填色 pill */
 .nav-badge {
   background: var(--color-primary);
   color: #fff;
