@@ -1,16 +1,28 @@
 <script setup>
-import { inject } from 'vue'
+import { inject, ref, computed } from 'vue'
 
 const currentView = inject('currentView')
 const navigate = inject('navigate')
 const likedIds = inject('like').likedIds
 const createdPlaylists = inject('createdPlaylists')
+const subscribedPlaylists = inject('subscribedPlaylists')
 const playlistDetail = inject('playlistDetail')
 const openPlaylist = inject('openPlaylist')
 const isLoggedIn = inject('isLoggedIn')
 const userProfile = inject('userProfile')
 const showLoginModal = inject('showLoginModal')
 const logout = inject('logout')
+
+const COLLAPSE_LIMIT = 5
+const createdExpanded = ref(false)
+const subscribedExpanded = ref(false)
+
+const visibleCreated = computed(() =>
+  createdExpanded.value ? createdPlaylists.value : createdPlaylists.value.slice(0, COLLAPSE_LIMIT)
+)
+const visibleSubscribed = computed(() =>
+  subscribedExpanded.value ? subscribedPlaylists.value : subscribedPlaylists.value.slice(0, COLLAPSE_LIMIT)
+)
 
 const todayBadge = (() => {
   const now = new Date()
@@ -96,18 +108,66 @@ const todayBadge = (() => {
       </div>
     </div>
 
+    <!-- 創建的歌單 -->
     <div class="nav-section" v-if="createdPlaylists.length">
-      <div class="nav-label">创建的歌单</div>
+      <div class="nav-label">創建的歌單</div>
       <div
-        class="nav-item"
-        v-for="pl in createdPlaylists"
+        class="nav-item playlist-nav-item"
+        v-for="pl in visibleCreated"
         :key="pl.id"
         :class="{active: currentView === 'playlist' && playlistDetail?.id === pl.id}"
         @click="openPlaylist(pl.id)"
       >
-        <svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
-        <span>{{ pl.name }}</span>
+        <img
+          v-if="pl.coverImgUrl"
+          :src="pl.coverImgUrl"
+          class="playlist-thumb"
+          loading="lazy"
+          referrerpolicy="no-referrer"
+        />
+        <svg v-else viewBox="0 0 24 24" fill="currentColor" class="playlist-thumb-icon"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+        <span class="playlist-nav-name">{{ pl.name }}</span>
+        <span class="nav-count" v-if="pl.trackCount">{{ pl.trackCount }}</span>
       </div>
+      <button
+        v-if="createdPlaylists.length > COLLAPSE_LIMIT"
+        class="expand-toggle"
+        @click="createdExpanded = !createdExpanded"
+      >
+        {{ createdExpanded ? '收起' : `顯示全部 ${createdPlaylists.length} 個` }}
+        <svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px" :style="{transform: createdExpanded ? 'rotate(180deg)' : 'none'}"><path d="M7 10l5 5 5-5z"/></svg>
+      </button>
+    </div>
+
+    <!-- 收藏的歌單 -->
+    <div class="nav-section" v-if="subscribedPlaylists.length">
+      <div class="nav-label">收藏的歌單</div>
+      <div
+        class="nav-item playlist-nav-item"
+        v-for="pl in visibleSubscribed"
+        :key="pl.id"
+        :class="{active: currentView === 'playlist' && playlistDetail?.id === pl.id}"
+        @click="openPlaylist(pl.id)"
+      >
+        <img
+          v-if="pl.coverImgUrl"
+          :src="pl.coverImgUrl"
+          class="playlist-thumb"
+          loading="lazy"
+          referrerpolicy="no-referrer"
+        />
+        <svg v-else viewBox="0 0 24 24" fill="currentColor" class="playlist-thumb-icon"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+        <span class="playlist-nav-name">{{ pl.name }}</span>
+        <span class="nav-count" v-if="pl.trackCount">{{ pl.trackCount }}</span>
+      </div>
+      <button
+        v-if="subscribedPlaylists.length > COLLAPSE_LIMIT"
+        class="expand-toggle"
+        @click="subscribedExpanded = !subscribedExpanded"
+      >
+        {{ subscribedExpanded ? '收起' : `顯示全部 ${subscribedPlaylists.length} 個` }}
+        <svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px" :style="{transform: subscribedExpanded ? 'rotate(180deg)' : 'none'}"><path d="M7 10l5 5 5-5z"/></svg>
+      </button>
     </div>
   </aside>
 </template>
@@ -188,8 +248,6 @@ const todayBadge = (() => {
   background: var(--color-primary-highlight);
   color: var(--color-primary);
 }
-
-/* 兩個 badge 統一樣式：margin-left: auto 推到最右 */
 .nav-badge,
 .nav-count {
   margin-left: auto;
@@ -198,8 +256,6 @@ const todayBadge = (() => {
   line-height: 1;
   flex-shrink: 0;
 }
-
-/* 每日推薦：圓角填色 pill */
 .nav-badge {
   background: var(--color-primary);
   color: #fff;
@@ -207,9 +263,57 @@ const todayBadge = (() => {
   border-radius: 9999px;
   font-size: 0.625rem;
 }
-
-/* 我喜歡：純文字數字 */
 .nav-count {
   color: var(--color-text-faint);
+}
+
+/* Playlist nav items */
+.playlist-nav-item {
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+.playlist-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.playlist-thumb-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  opacity: 0.45;
+}
+.playlist-nav-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+}
+
+/* Expand/collapse toggle */
+.expand-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 12px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+.expand-toggle:hover {
+  background: var(--color-surface-offset);
+  color: var(--color-text);
+}
+.expand-toggle svg {
+  transition: transform 0.2s;
 }
 </style>

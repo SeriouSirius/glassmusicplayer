@@ -42,6 +42,7 @@ const fmSongs = ref([])
 const fmLoading = ref(false)
 const recentSongs = ref(JSON.parse(localStorage.getItem('recentSongs') || '[]'))
 const createdPlaylists = ref([])
+const subscribedPlaylists = ref([])
 const toplist = ref([])
 const toplistError = ref('')
 const artistDetail = ref(null)
@@ -81,6 +82,7 @@ provide('fmSongs', fmSongs)
 provide('fmLoading', fmLoading)
 provide('recentSongs', recentSongs)
 provide('createdPlaylists', createdPlaylists)
+provide('subscribedPlaylists', subscribedPlaylists)
 provide('toplist', toplist)
 provide('toplistError', toplistError)
 provide('artistDetail', artistDetail)
@@ -124,6 +126,36 @@ function addToRecent(song) {
   localStorage.setItem('recentSongs', JSON.stringify(recentSongs.value))
 }
 provide('addToRecent', addToRecent)
+
+// ── FR-03: Load user playlists ───────────────────────────────────────────────
+async function loadUserPlaylists() {
+  if (!auth.isLoggedIn.value || !auth.userProfile.value) return
+  try {
+    const uid = auth.userProfile.value.userId
+    const r = await api('/user/playlist?uid=' + uid + '&limit=100')
+    if (!r?.playlist) return
+    // First playlist owned by self is always "我喜歡的音樂", skip it here
+    // (it's already shown as the "我喜歡" nav item via useLike)
+    const all = r.playlist
+    const selfId = uid
+    createdPlaylists.value = all.filter(pl => pl.userId === selfId && pl.id !== all[0]?.id)
+    subscribedPlaylists.value = all.filter(pl => pl.userId !== selfId)
+  } catch (e) {
+    console.error('loadUserPlaylists error:', e)
+  }
+}
+provide('loadUserPlaylists', loadUserPlaylists)
+
+// Watch login state: load on login, clear on logout
+watch(auth.isLoggedIn, (loggedIn) => {
+  if (loggedIn) {
+    loadUserPlaylists()
+  } else {
+    createdPlaylists.value = []
+    subscribedPlaylists.value = []
+  }
+})
+// ─────────────────────────────────────────────────────────────────────────────
 
 // API load functions
 async function loadDiscover() {
@@ -175,8 +207,6 @@ async function doSearch() {
       searchPlaylistResults.value = r?.result?.playlists || []
       searchResults.value = []; searchArtistResults.value = []; searchAlbumResults.value = []
     } else if (searchTab.value === 'artist') {
-      // type=101 requires login cookie; run both requests in parallel and
-      // fall back to extracting artists from song results when it returns empty.
       const [artistRes, songRes] = await Promise.all([
         api('/search?keywords=' + encodeURIComponent(q) + '&limit=30&type=101').catch(() => null),
         api('/search?keywords=' + encodeURIComponent(q) + '&limit=50&type=1').catch(() => null)
@@ -185,7 +215,6 @@ async function doSearch() {
       if (directArtists.length > 0) {
         searchArtistResults.value = directArtists
       } else {
-        // Extract unique artists from song results, filter by keyword, sort by frequency
         const songs = songRes?.result?.songs || []
         const artistMap = new Map()
         songs.forEach(song => {
@@ -200,11 +229,7 @@ async function doSearch() {
         const filtered = [...artistMap.values()]
           .filter(ar => ar.name.toLowerCase().includes(q.toLowerCase()))
           .sort((a, b) => b._count - a._count)
-
-        // Show results immediately (avatars will stream in)
         searchArtistResults.value = filtered
-
-        // Fetch avatars in parallel (cap at 8 to avoid spamming the API)
         const toFetch = filtered.slice(0, 8)
         const detailResults = await Promise.allSettled(
           toFetch.map(ar => api('/artists?id=' + ar.id).catch(() => null))
@@ -212,12 +237,10 @@ async function doSearch() {
         detailResults.forEach((res, i) => {
           if (res.status === 'fulfilled' && res.value) {
             const detail = res.value
-            // /artists returns { artist: {...}, hotSongs: [...] }
             const picUrl = detail.artist?.picUrl || detail.artist?.img1v1Url || null
             if (picUrl) {
               const idx = searchArtistResults.value.findIndex(a => a.id === toFetch[i].id)
               if (idx !== -1) {
-                // Mutate via splice so Vue 3 reactivity picks it up
                 searchArtistResults.value.splice(idx, 1, { ...searchArtistResults.value[idx], picUrl })
               }
             }
@@ -310,8 +333,6 @@ provide('navigate', navigate)
 function collectPlaylist() { showToast('歌单已收藏') }
 provide('collectPlaylist', collectPlaylist)
 
-// playSongWrapper: 統一播放入口。簽名 (song, isFm?, list?, startIndex?)
-// 若傳入 list，則以 startIndex 為起始位置播放整個列表；否則單曲播放並更新最近播放。
 async function playSongWrapper(song, isFm = false, list = null, startIndex = null) {
   if (list && list.length > 1) {
     const idx = startIndex !== null ? startIndex : list.findIndex(s => s.id === song.id)
@@ -436,6 +457,6 @@ onUnmounted(() => {
   <LoginModal
     v-if="showLoginModal"
     @close="showLoginModal = false"
-    @success="showLoginModal = false"
+    @success="showLoginModal = false; loadUserPlaylists()"
   />
 </template>
