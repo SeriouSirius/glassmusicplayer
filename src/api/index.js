@@ -1,8 +1,11 @@
 const API = 'https://musicapi.acma.cc'
 
-export async function api(path) {
+export async function api(path, options = {}) {
   try {
-    const r = await fetch(API + path)
+    const r = await fetch(API + path, {
+      credentials: 'include',
+      ...options
+    })
     if (!r.ok) throw new Error('HTTP ' + r.status)
     const d = await r.json()
     if (d.code !== 200 && d.code !== undefined) throw new Error(d.message || 'API error:' + d.code)
