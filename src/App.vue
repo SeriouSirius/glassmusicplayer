@@ -136,7 +136,7 @@ async function loadUserPlaylists() {
     if (!r?.playlist) return
     const all = r.playlist
     const selfId = uid
-    // Skip the first playlist ("我喜歡的音樂") — handled by useLike
+    // Skip the first playlist (「我喜歡的音樂」) — handled by useLike
     createdPlaylists.value = all.filter(pl => pl.userId === selfId && pl.id !== all[0]?.id)
     subscribedPlaylists.value = all.filter(pl => pl.userId !== selfId)
   } catch (e) {
@@ -151,6 +151,9 @@ function isPlaylistSubscribed(id) {
 }
 provide('isPlaylistSubscribed', isPlaylistSubscribed)
 
+// Guard: track in-flight subscribe requests per playlist id to prevent 405 rate limit
+const subscribingIds = ref(new Set())
+
 // Toggle subscribe / unsubscribe for a playlist
 async function toggleSubscribePlaylist(playlist) {
   if (!auth.isLoggedIn.value) {
@@ -162,6 +165,10 @@ async function toggleSubscribePlaylist(playlist) {
     showToast('無法收藏自己的歌單')
     return
   }
+  // Prevent duplicate in-flight requests for the same playlist
+  if (subscribingIds.value.has(playlist.id)) return
+  subscribingIds.value.add(playlist.id)
+
   const alreadySubscribed = isPlaylistSubscribed(playlist.id)
   const t = alreadySubscribed ? 2 : 1 // 1 = subscribe, 2 = unsubscribe
   try {
@@ -175,15 +182,21 @@ async function toggleSubscribePlaylist(playlist) {
         subscribedPlaylists.value = [playlist, ...subscribedPlaylists.value]
         showToast('歌單已加入收藏')
       }
+    } else if (r?.code === 405) {
+      showToast('操作過於頻繁，請稍後再試')
     } else {
       showToast('操作失败，請稍後重試')
     }
   } catch (e) {
     console.error('toggleSubscribePlaylist error:', e)
     showToast('網路異常，請稍後重試')
+  } finally {
+    // Release lock after 1 s to prevent accidental rapid re-clicks
+    setTimeout(() => subscribingIds.value.delete(playlist.id), 1000)
   }
 }
 provide('toggleSubscribePlaylist', toggleSubscribePlaylist)
+provide('subscribingIds', subscribingIds)
 
 watch(auth.isLoggedIn, (loggedIn) => {
   if (loggedIn) {
