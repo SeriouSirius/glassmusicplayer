@@ -63,7 +63,6 @@ function handleToggleLike(id) {
 
 <template>
   <div>
-    <!-- 與 PlaylistDetailView 相同的 header 結構 -->
     <div class="playlist-detail-header">
       <div class="daily-date-cover">
         <span class="date-number">{{ todayBadge }}</span>
@@ -88,7 +87,7 @@ function handleToggleLike(id) {
     <div v-if="isLoading" class="glass-card" style="padding:8px 0">
       <div class="song-list">
         <div v-for="i in 10" :key="i" class="song-item">
-          <span class="song-index"><div class="skeleton-inline"></div></span>
+          <span class="song-index"><span class="skeleton-inline" style="width:16px;height:14px;border-radius:3px"></span></span>
           <div class="skeleton-inline" style="width:40px;height:40px;border-radius:6px;flex-shrink:0"></div>
           <div class="song-info">
             <div class="skeleton-inline" style="width:55%;height:13px;border-radius:3px;margin-bottom:6px"></div>
@@ -189,7 +188,7 @@ function handleToggleLike(id) {
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
   border-radius: 3px;
-  display: block;
+  display: inline-block;
 }
 
 @media (max-width: 768px) {

@@ -261,9 +261,8 @@ provide('navigate', navigate)
 function collectPlaylist() { showToast('歌单已收藏') }
 provide('collectPlaylist', collectPlaylist)
 
-// Bug 2 fix: playSongWrapper 接收 (song, isFm, list, startIndex)
-// DailyRecommendView emit('play-song', song, list, index) 對應
-// AppLayout 將 @play-song="(song, list, idx) => playSong(song, false, list, idx)"
+// playSongWrapper: 統一播放入口。簽名 (song, isFm?, list?, startIndex?)
+// 若傳入 list，則以 startIndex 為起始位置播放整個列表；否則單曲播放並更新最近播放。
 async function playSongWrapper(song, isFm = false, list = null, startIndex = null) {
   if (list && list.length > 1) {
     const idx = startIndex !== null ? startIndex : list.findIndex(s => s.id === song.id)
