@@ -151,7 +151,7 @@ function isPlaylistSubscribed(id) {
 }
 provide('isPlaylistSubscribed', isPlaylistSubscribed)
 
-// Guard: track in-flight subscribe requests per playlist id to prevent 405 rate limit
+// Guard: track in-flight subscribe requests per playlist id to prevent duplicate calls
 const subscribingIds = ref(new Set())
 
 // Toggle subscribe / unsubscribe for a playlist
@@ -173,30 +173,57 @@ async function toggleSubscribePlaylist(playlist) {
   const t = alreadySubscribed ? 2 : 1 // 1 = subscribe, 2 = unsubscribe
   try {
     const r = await api('/playlist/subscribe?t=' + t + '&id=' + playlist.id, { method: 'POST' })
+    // Debug: log raw response to help diagnose 405 issues
+    console.log('[toggleSubscribePlaylist] raw response:', JSON.stringify(r))
     if (r?.code === 200 || r?.code === undefined) {
       if (alreadySubscribed) {
         subscribedPlaylists.value = subscribedPlaylists.value.filter(pl => pl.id !== playlist.id)
         showToast('已取消收藏')
       } else {
-        // Prepend with basic info; full details load on next login/refresh
         subscribedPlaylists.value = [playlist, ...subscribedPlaylists.value]
         showToast('歌單已加入收藏')
       }
     } else if (r?.code === 405) {
-      showToast('操作過於頻繁，請稍後再試')
+      showToast('操作被拒絕 (405)，請查看 Console 了解詳情')
     } else {
-      showToast('操作失败，請稍後重試')
+      showToast('操作失败 (code ' + r?.code + ')，請稍後重試')
     }
   } catch (e) {
     console.error('toggleSubscribePlaylist error:', e)
     showToast('網路異常，請稍後重試')
   } finally {
-    // Release lock after 1 s to prevent accidental rapid re-clicks
     setTimeout(() => subscribingIds.value.delete(playlist.id), 1000)
   }
 }
 provide('toggleSubscribePlaylist', toggleSubscribePlaylist)
 provide('subscribingIds', subscribingIds)
+
+// ── FR-03: Create new playlist ───────────────────────────────────────────────
+async function createPlaylist(name) {
+  if (!auth.isLoggedIn.value) {
+    showLoginModal.value = true
+    return
+  }
+  if (!name?.trim()) return
+  try {
+    const r = await api('/playlist/create?name=' + encodeURIComponent(name.trim()), { method: 'POST' })
+    // Debug: log raw response to verify timestamp fix works here
+    console.log('[createPlaylist] raw response:', JSON.stringify(r))
+    if (r?.code === 200 && r?.playlist) {
+      createdPlaylists.value = [r.playlist, ...createdPlaylists.value]
+      showToast('歌單「' + r.playlist.name + '」已建立')
+    } else if (r?.code === 405) {
+      showToast('建立失敗 (405)，timestamp 可能未生效，請查看 Console')
+    } else {
+      showToast('建立失敗 (code ' + r?.code + ')')
+    }
+  } catch (e) {
+    console.error('createPlaylist error:', e)
+    showToast('網路異常，請稍後重試')
+  }
+}
+provide('createPlaylist', createPlaylist)
+// ─────────────────────────────────────────────────────────────────────────────
 
 watch(auth.isLoggedIn, (loggedIn) => {
   if (loggedIn) {
@@ -206,7 +233,6 @@ watch(auth.isLoggedIn, (loggedIn) => {
     subscribedPlaylists.value = []
   }
 })
-// ─────────────────────────────────────────────────────────────────────────────
 
 // API load functions
 async function loadDiscover() {
