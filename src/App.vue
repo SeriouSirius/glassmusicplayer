@@ -191,21 +191,38 @@ async function doSearch() {
         songs.forEach(song => {
           song.artists?.forEach(ar => {
             if (!artistMap.has(ar.id)) {
-              artistMap.set(ar.id, {
-                id: ar.id,
-                name: ar.name,
-                picUrl: ar.img1v1Url || null,
-                img1v1Url: ar.img1v1Url || null,
-                _count: 1
-              })
+              artistMap.set(ar.id, { id: ar.id, name: ar.name, picUrl: null, img1v1Url: null, _count: 1 })
             } else {
               artistMap.get(ar.id)._count++
             }
           })
         })
-        searchArtistResults.value = [...artistMap.values()]
+        const filtered = [...artistMap.values()]
           .filter(ar => ar.name.toLowerCase().includes(q.toLowerCase()))
           .sort((a, b) => b._count - a._count)
+
+        // Show results immediately (avatars will stream in)
+        searchArtistResults.value = filtered
+
+        // Fetch avatars in parallel (cap at 8 to avoid spamming the API)
+        const toFetch = filtered.slice(0, 8)
+        const detailResults = await Promise.allSettled(
+          toFetch.map(ar => api('/artists?id=' + ar.id).catch(() => null))
+        )
+        detailResults.forEach((res, i) => {
+          if (res.status === 'fulfilled' && res.value) {
+            const detail = res.value
+            // /artists returns { artist: {...}, hotSongs: [...] }
+            const picUrl = detail.artist?.picUrl || detail.artist?.img1v1Url || null
+            if (picUrl) {
+              const idx = searchArtistResults.value.findIndex(a => a.id === toFetch[i].id)
+              if (idx !== -1) {
+                // Mutate via splice so Vue 3 reactivity picks it up
+                searchArtistResults.value.splice(idx, 1, { ...searchArtistResults.value[idx], picUrl })
+              }
+            }
+          }
+        })
       }
       searchResults.value = []; searchPlaylistResults.value = []; searchAlbumResults.value = []
     } else if (searchTab.value === 'album') {

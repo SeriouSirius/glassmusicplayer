@@ -25,6 +25,17 @@ const player = inject('player')
 const like = inject('like')
 const findSongById = inject('findSongById')
 const playSong = inject('playSong')
+
+function onAvatarError(e, name) {
+  // Replace broken img with an SVG initial-letter placeholder
+  const el = e.target
+  const initial = (name || '?')[0].toUpperCase()
+  const colors = ['#4f98a3','#6daa45','#bb653b','#7a39bb','#d19900','#006494']
+  const bg = colors[initial.charCodeAt(0) % colors.length]
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><rect width="80" height="80" rx="40" fill="${bg}"/><text x="40" y="40" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="32" font-weight="600" fill="white">${initial}</text></svg>`
+  el.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
+  el.onerror = null // prevent infinite loop
+}
 </script>
 
 <template>
@@ -81,7 +92,13 @@ const playSong = inject('playSong')
   <template v-if="searchTab === 'artist' && searchArtistResults.length && !searchError">
     <div class="search-artist-grid">
       <div class="artist-card" v-for="ar in searchArtistResults" :key="ar.id" @click="openArtist(ar.id)">
-        <img class="artist-avatar" :src="ar.picUrl || ar.img1v1Url" referrerpolicy="no-referrer" loading="lazy">
+        <img
+          class="artist-avatar"
+          :src="ar.picUrl || ar.img1v1Url || ''"
+          referrerpolicy="no-referrer"
+          loading="lazy"
+          @error="onAvatarError($event, ar.name)"
+        >
         <div class="artist-name" v-html="highlightText(ar.name, searchQuery)"></div>
         <div class="artist-fans" v-if="ar.fans">{{ formatCount(ar.fans) }} 粉丝</div>
       </div>
