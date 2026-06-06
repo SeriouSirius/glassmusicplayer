@@ -1,13 +1,17 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, inject } from 'vue'
 import { api } from '../api/index.js'
 
 const songs = ref([])
 const isLoading = ref(true)
 const error = ref('')
 
-// Bug 3: 限制 30 首
 const displaySongs = computed(() => songs.value.slice(0, 30))
+
+const playSong = inject('playSong')
+const player = inject('player')
+const like = inject('like')
+const findSongById = inject('findSongById')
 
 onMounted(async () => {
   try {
@@ -20,180 +24,153 @@ onMounted(async () => {
   }
 })
 
-const emit = defineEmits(['play-song'])
-
-// Bug 2: 傳入正確的 index、列表也統一用 displaySongs
-function playSong(song, index) {
-  emit('play-song', song, displaySongs.value, index)
+function playAll() {
+  if (displaySongs.value.length)
+    playSong(displaySongs.value[0], false, displaySongs.value, 0)
 }
 
-function playAll() {
-  emit('play-song', displaySongs.value[0], displaySongs.value, 0)
+function handlePlay(song, index) {
+  playSong(song, false, displaySongs.value, index)
+}
+
+function getSongArtist(s) {
+  return (s.ar || s.artists)?.map(a => a.name).join(' / ') || ''
+}
+
+function getSongAlbum(s) {
+  return s.al?.name || s.album?.name || ''
+}
+
+function getDuration(s) {
+  const ms = s.dt || s.duration || 0
+  return `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}`
+}
+
+function handleToggleLike(id) {
+  like.toggleLike(id, findSongById)
 }
 </script>
 
 <template>
-  <div class="daily-view">
-    <div class="daily-header">
-      <div class="daily-date">
+  <div>
+    <!-- 與 PlaylistDetailView 相同的 header 結構 -->
+    <div class="playlist-detail-header">
+      <div class="daily-date-cover">
         <span class="date-number">{{ new Date().getDate() }}</span>
         <span class="date-label">每日推薦</span>
       </div>
-      <div class="daily-meta">
-        <h1>每日推薦</h1>
-        <p class="meta-desc">根據你的音樂品味，每天更新</p>
-      </div>
-      <button
-        v-if="displaySongs.length"
-        class="play-all-btn"
-        @click="playAll"
-        aria-label="播放全部"
-      >
-        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-          <path d="M8 5v14l11-7z"/>
-        </svg>
-        播放全部
-      </button>
-    </div>
-
-    <!-- 載入中 -->
-    <div v-if="isLoading" class="skeleton-list">
-      <div v-for="i in 10" :key="i" class="skeleton-row">
-        <div class="skeleton skeleton-index"></div>
-        <div class="skeleton skeleton-cover"></div>
-        <div class="skeleton-info">
-          <div class="skeleton skeleton-title"></div>
-          <div class="skeleton skeleton-artist"></div>
+      <div class="playlist-detail-info">
+        <span class="playlist-detail-tag">每日推薦</span>
+        <h1 class="playlist-detail-name">每日推薦</h1>
+        <div class="playlist-detail-meta">根據你的音樂品味，每天更新
+          <template v-if="displaySongs.length"> · {{ displaySongs.length }}首</template>
         </div>
-        <div class="skeleton skeleton-album"></div>
-        <div class="skeleton skeleton-duration"></div>
+        <div class="playlist-detail-actions" v-if="displaySongs.length">
+          <button class="btn btn-primary" @click="playAll">
+            <svg viewBox="0 0 24 24" fill="white" style="width:16px;height:16px"><path d="M8 5v14l11-7z"/></svg>
+            播放全部
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- 錯誤 -->
-    <div v-else-if="error" class="empty-state">
-      <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48" class="empty-icon">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
-      </svg>
+    <!-- Skeleton -->
+    <div v-if="isLoading" class="glass-card" style="padding:8px 0">
+      <div class="song-list">
+        <div v-for="i in 10" :key="i" class="song-item">
+          <span class="song-index"><div class="skeleton-inline"></div></span>
+          <div class="skeleton-inline" style="width:40px;height:40px;border-radius:6px;flex-shrink:0"></div>
+          <div class="song-info">
+            <div class="skeleton-inline" style="width:55%;height:13px;border-radius:3px;margin-bottom:6px"></div>
+            <div class="skeleton-inline" style="width:35%;height:11px;border-radius:3px"></div>
+          </div>
+          <div class="skeleton-inline" style="width:30%;height:12px;border-radius:3px"></div>
+          <div class="skeleton-inline" style="width:36px;height:12px;border-radius:3px"></div>
+          <div class="song-actions"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div v-else-if="error" class="glass-card" style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:64px 32px;color:var(--color-text-muted);text-align:center">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48" style="color:var(--color-text-faint)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
       <p>{{ error }}</p>
     </div>
 
-    <!-- 歌曲列表 -->
-    <ul v-else class="song-list">
-      <li
-        v-for="(song, index) in displaySongs"
-        :key="song.id"
-        class="song-row"
-        @click="playSong(song, index)"
-        role="button"
-        tabindex="0"
-        @keyup.enter="playSong(song, index)"
-      >
-        <span class="song-index">{{ index + 1 }}</span>
-        <img
-          :src="(song.al?.picUrl || '') + '?param=40y40'"
-          :alt="song.al?.name || ''"
-          class="song-cover"
-          width="40" height="40"
-          loading="lazy"
-        />
-        <div class="song-info">
-          <span class="song-name">{{ song.name }}</span>
-          <span class="song-artist">{{ song.ar?.map(a => a.name).join(' / ') }}</span>
+    <!-- 歌曲列表：和 SongList.vue 完全相同的 class 結構 -->
+    <div v-else class="glass-card" style="padding:8px 0">
+      <div class="song-list">
+        <div
+          class="song-item"
+          v-for="(s, i) in displaySongs"
+          :key="s.id"
+          :class="{ playing: player.currentSong.value?.id === s.id }"
+          @click="handlePlay(s, i)"
+        >
+          <span class="song-index">{{ i + 1 }}</span>
+          <img
+            class="song-cover"
+            :src="(s.al?.picUrl || '') + '?param=40y40'"
+            :alt="getSongAlbum(s)"
+            referrerpolicy="no-referrer"
+            loading="lazy"
+          />
+          <div class="song-info">
+            <div class="song-name">{{ s.name }}</div>
+            <div class="song-artist">{{ getSongArtist(s) }}</div>
+          </div>
+          <span class="song-album">{{ getSongAlbum(s) }}</span>
+          <span class="song-duration">{{ getDuration(s) }}</span>
+          <div class="song-actions">
+            <button
+              class="song-action-btn"
+              :class="{ liked: like.likedIds.value.has(s.id) }"
+              @click.stop="handleToggleLike(s.id)"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+            </button>
+          </div>
         </div>
-        <span class="song-album">{{ song.al?.name }}</span>
-        <span class="song-duration">
-          {{ Math.floor(song.dt / 60000) }}:{{ String(Math.floor((song.dt % 60000) / 1000)).padStart(2, '0') }}
-        </span>
-      </li>
-    </ul>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.daily-view {
-  padding: 24px 32px;
-  max-width: 1200px;
-  box-sizing: border-box;
-}
-
-.daily-header {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  margin-bottom: 32px;
-  padding-bottom: 24px;
-  border-bottom: 1px solid var(--color-divider, rgba(0,0,0,0.1));
-}
-
-.daily-date {
-  width: 72px;
-  height: 72px;
+/* Header cover 專屬樣式，其餘共用全域 CSS */
+.daily-date-cover {
+  width: 140px;
+  height: 140px;
+  min-width: 140px;
   background: var(--color-primary, #01696f);
   border-radius: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
   color: #fff;
+  flex-shrink: 0;
 }
 
 .date-number {
-  font-size: 1.75rem;
+  font-size: 3rem;
   font-weight: 700;
   line-height: 1;
 }
 
 .date-label {
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   opacity: 0.85;
-  margin-top: 2px;
+  margin-top: 4px;
   letter-spacing: 0.05em;
 }
 
-.daily-meta { flex: 1; }
-
-.daily-meta h1 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--color-text, #28251d);
-  margin: 0 0 4px;
-}
-
-.meta-desc {
-  font-size: 0.875rem;
-  color: var(--color-text-muted, #7a7974);
-  margin: 0;
-}
-
-.play-all-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 20px;
-  background: var(--color-primary, #01696f);
-  color: #fff;
-  border: none;
-  border-radius: 9999px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 180ms ease;
-  flex-shrink: 0;
-}
-
-.play-all-btn:hover {
-  background: var(--color-primary-hover, #0c4e54);
-}
-
-/* Skeleton */
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
   100% { background-position:  200% 0; }
 }
 
-.skeleton {
+.skeleton-inline {
   background: linear-gradient(
     90deg,
     var(--color-surface-offset, #edeae5) 25%,
@@ -202,130 +179,16 @@ function playAll() {
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
-  border-radius: 4px;
-}
-
-.skeleton-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.skeleton-row {
-  display: grid;
-  grid-template-columns: 32px 40px 1fr 1fr 52px;
-  align-items: center;
-  gap: 12px;
-  padding: 8px;
-}
-
-.skeleton-index   { height: 14px; }
-.skeleton-cover   { width: 40px; height: 40px; border-radius: 6px; }
-.skeleton-info    { display: flex; flex-direction: column; gap: 6px; }
-.skeleton-title   { height: 13px; width: 55%; }
-.skeleton-artist  { height: 11px; width: 35%; }
-.skeleton-album   { height: 12px; width: 70%; }
-.skeleton-duration{ height: 12px; width: 36px; justify-self: end; }
-
-/* Empty state */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  padding: 64px 32px;
-  color: var(--color-text-muted, #7a7974);
-  text-align: center;
-}
-
-.empty-icon { color: var(--color-text-faint, #bab9b4); }
-
-/* Song list */
-.song-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.song-row {
-  display: grid;
-  grid-template-columns: 32px 40px 1fr 1fr 52px;
-  align-items: center;
-  gap: 12px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 180ms ease;
-  outline: none;
-}
-
-.song-row:hover  { background: var(--color-surface-offset, #edeae5); }
-.song-row:active { background: var(--color-surface-dynamic, #e6e4df); }
-.song-row:focus-visible { outline: 2px solid var(--color-primary, #01696f); }
-
-.song-index {
-  font-size: 0.8125rem;
-  color: var(--color-text-faint, #bab9b4);
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.song-cover {
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
-  object-fit: cover;
-  flex-shrink: 0;
-  background: var(--color-surface-offset, #edeae5);
-}
-
-.song-info {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-
-.song-name {
-  font-size: 0.875rem;
-  color: var(--color-text, #28251d);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: 500;
-}
-
-.song-artist {
-  font-size: 0.75rem;
-  color: var(--color-text-muted, #7a7974);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.song-album {
-  font-size: 0.75rem;
-  color: var(--color-text-muted, #7a7974);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.song-duration {
-  font-size: 0.75rem;
-  color: var(--color-text-faint, #bab9b4);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  border-radius: 3px;
+  display: block;
 }
 
 @media (max-width: 768px) {
-  .daily-view { padding: 16px; }
-
-  .song-row {
-    grid-template-columns: 28px 40px 1fr 44px;
+  .daily-date-cover {
+    width: 90px;
+    height: 90px;
+    min-width: 90px;
   }
-
-  .song-album { display: none; }
+  .date-number { font-size: 2rem; }
 }
 </style>
