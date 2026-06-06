@@ -13,6 +13,11 @@ const player = inject('player')
 const like = inject('like')
 const findSongById = inject('findSongById')
 
+const todayBadge = (() => {
+  const now = new Date()
+  return `${now.getMonth() + 1}/${now.getDate()}`
+})()
+
 onMounted(async () => {
   try {
     const r = await api('/recommend/songs')
@@ -56,7 +61,7 @@ function handleToggleLike(id) {
     <!-- 與 PlaylistDetailView 相同的 header 結構 -->
     <div class="playlist-detail-header">
       <div class="daily-date-cover">
-        <span class="date-number">{{ new Date().getDate() }}</span>
+        <span class="date-number">{{ todayBadge }}</span>
         <span class="date-label">每日推薦</span>
       </div>
       <div class="playlist-detail-info">
