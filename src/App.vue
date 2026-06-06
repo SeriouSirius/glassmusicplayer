@@ -100,7 +100,7 @@ provide('userProfile', auth.userProfile)
 provide('showLoginModal', showLoginModal)
 provide('logout', auth.logout)
 
-// Helper functions provided
+// Helper functions
 function showToast(m) { toastMsg.value = m; setTimeout(() => toastMsg.value = '', 2500) }
 provide('showToast', showToast)
 
@@ -254,8 +254,6 @@ function navigate(v) {
   currentView.value = v
   if (v === 'search') nextTick(() => searchInput.value?.focus())
   if (v === 'toplist' && !toplist.value.length) loadToplist()
-  // 切換到每日推薦時滘覆 dailySongs，由 DailyRecommendView 自行呼叫 API
-  // （DailyRecommendView 內置 onMounted 自動載入，每次切換都重新載入以防止與小時為單伏密碼過期問題）
   nextTick(() => { if (mainContent.value) mainContent.value.scrollTop = 0 })
 }
 provide('navigate', navigate)
@@ -263,11 +261,12 @@ provide('navigate', navigate)
 function collectPlaylist() { showToast('歌单已收藏') }
 provide('collectPlaylist', collectPlaylist)
 
-// Play wrapper that integrates with like/recent
-async function playSongWrapper(song, isFm = false, list = null) {
-  // 若傳入每日推薦列表，先設定播放高列表
+// Bug 2 fix: playSongWrapper 接收 (song, isFm, list, startIndex)
+// DailyRecommendView emit('play-song', song, list, index) 對應
+// AppLayout 將 @play-song="(song, list, idx) => playSong(song, false, list, idx)"
+async function playSongWrapper(song, isFm = false, list = null, startIndex = null) {
   if (list && list.length > 1) {
-    const idx = list.findIndex(s => s.id === song.id)
+    const idx = startIndex !== null ? startIndex : list.findIndex(s => s.id === song.id)
     player.playSongsList(list, idx >= 0 ? idx : 0)
     return
   }
@@ -349,7 +348,6 @@ function handleKeydown(e) {
   }
 }
 
-// Watch playMode for persistence
 watch(() => player.playMode.value, v => localStorage.setItem('playMode', v))
 watch(showSearchOverlay, v => {
   if (v) nextTick(() => {
@@ -363,7 +361,7 @@ onMounted(() => {
   loadDiscover()
   loadHotSearches()
   startBannerRotation()
-  auth.initAuth()  // 嘗試恢復登入狀態
+  auth.initAuth()
   document.addEventListener('keydown', handleKeydown)
   if (audioEl.value) player.setAudioEl(audioEl.value)
 })
