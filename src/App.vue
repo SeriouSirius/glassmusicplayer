@@ -152,11 +152,10 @@ async function doSearch() {
   isLoading.value = true
   searchError.value = ''
   currentView.value = 'search'
+  const q = searchQuery.value
   try {
-    const tM = { song: 1, playlist: 100, artist: 101, album: 10 }
-    const t = tM[searchTab.value] || 1
-    const r = await api('/search?keywords=' + encodeURIComponent(searchQuery.value) + '&limit=50&type=' + t)
     if (searchTab.value === 'song') {
+      const r = await api('/search?keywords=' + encodeURIComponent(q) + '&limit=50&type=1')
       searchResults.value = r?.result?.songs || []
       searchPlaylistResults.value = []; searchArtistResults.value = []; searchAlbumResults.value = []
       if (searchResults.value.length) {
@@ -172,12 +171,45 @@ async function doSearch() {
         } catch (e) { }
       }
     } else if (searchTab.value === 'playlist') {
+      const r = await api('/search?keywords=' + encodeURIComponent(q) + '&limit=50&type=100')
       searchPlaylistResults.value = r?.result?.playlists || []
       searchResults.value = []; searchArtistResults.value = []; searchAlbumResults.value = []
     } else if (searchTab.value === 'artist') {
-      searchArtistResults.value = r?.result?.artists || []
+      // type=101 requires login cookie; run both requests in parallel and
+      // fall back to extracting artists from song results when it returns empty.
+      const [artistRes, songRes] = await Promise.all([
+        api('/search?keywords=' + encodeURIComponent(q) + '&limit=30&type=101').catch(() => null),
+        api('/search?keywords=' + encodeURIComponent(q) + '&limit=50&type=1').catch(() => null)
+      ])
+      const directArtists = artistRes?.result?.artists || []
+      if (directArtists.length > 0) {
+        searchArtistResults.value = directArtists
+      } else {
+        // Extract unique artists from song results, filter by keyword, sort by frequency
+        const songs = songRes?.result?.songs || []
+        const artistMap = new Map()
+        songs.forEach(song => {
+          song.artists?.forEach(ar => {
+            if (!artistMap.has(ar.id)) {
+              artistMap.set(ar.id, {
+                id: ar.id,
+                name: ar.name,
+                picUrl: ar.img1v1Url || null,
+                img1v1Url: ar.img1v1Url || null,
+                _count: 1
+              })
+            } else {
+              artistMap.get(ar.id)._count++
+            }
+          })
+        })
+        searchArtistResults.value = [...artistMap.values()]
+          .filter(ar => ar.name.toLowerCase().includes(q.toLowerCase()))
+          .sort((a, b) => b._count - a._count)
+      }
       searchResults.value = []; searchPlaylistResults.value = []; searchAlbumResults.value = []
     } else if (searchTab.value === 'album') {
+      const r = await api('/search?keywords=' + encodeURIComponent(q) + '&limit=50&type=10')
       searchAlbumResults.value = r?.result?.albums || []
       searchResults.value = []; searchPlaylistResults.value = []; searchArtistResults.value = []
     }
