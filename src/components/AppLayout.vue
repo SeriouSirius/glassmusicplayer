@@ -18,7 +18,6 @@ const mainContent = inject('mainContent')
 const playlistDetail = inject('playlistDetail')
 const artistDetail = inject('artistDetail')
 const albumDetail = inject('albumDetail')
-const playSong = inject('playSong')
 </script>
 
 <template>
@@ -40,11 +39,7 @@ const playSong = inject('playSong')
       <LikedView v-if="currentView === 'liked'" />
       <RecentView v-if="currentView === 'recent'" />
       <FMView v-if="currentView === 'fm'" />
-      <!-- Bug 2 fix: 傳遞正確的 (song, list, index) 簽名 -->
-      <DailyRecommendView
-        v-if="currentView === 'daily'"
-        @play-song="(song, list, idx) => playSong(song, false, list, idx)"
-      />
+      <DailyRecommendView v-if="currentView === 'daily'" />
       <div v-if="isLoading" class="loading-wrap"><div class="loading-spinner"></div>加载中...</div>
     </main>
   </div>

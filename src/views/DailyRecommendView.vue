@@ -46,6 +46,11 @@ function getSongAlbum(s) {
   return s.al?.name || s.album?.name || ''
 }
 
+function getCoverUrl(s) {
+  const url = s.al?.picUrl || s.album?.picUrl || s.picUrl || ''
+  return url ? `${url}?param=40y40` : ''
+}
+
 function getDuration(s) {
   const ms = s.dt || s.duration || 0
   return `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}`
@@ -102,7 +107,7 @@ function handleToggleLike(id) {
       <p>{{ error }}</p>
     </div>
 
-    <!-- 歌曲列表：和 SongList.vue 完全相同的 class 結構 -->
+    <!-- 歌曲列表 -->
     <div v-else class="glass-card" style="padding:8px 0">
       <div class="song-list">
         <div
@@ -115,7 +120,7 @@ function handleToggleLike(id) {
           <span class="song-index">{{ i + 1 }}</span>
           <img
             class="song-cover"
-            :src="(s.al?.picUrl || '') + '?param=40y40'"
+            :src="getCoverUrl(s)"
             :alt="getSongAlbum(s)"
             referrerpolicy="no-referrer"
             loading="lazy"
@@ -142,7 +147,6 @@ function handleToggleLike(id) {
 </template>
 
 <style scoped>
-/* Header cover 專屬樣式，其餘共用全域 CSS */
 .daily-date-cover {
   width: 140px;
   height: 140px;
