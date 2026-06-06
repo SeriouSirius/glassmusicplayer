@@ -3,6 +3,7 @@ import { api, getApiBase } from '../api/index.js'
 import { isLoggedIn } from './useAuth.js'
 
 const API = getApiBase()
+// 下一行是 currentSong，不再有任何 qualityUrl 相關常量
 
 const currentSong = ref(null)
 const isPlaying = ref(false)

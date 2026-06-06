@@ -91,6 +91,22 @@ const logout = inject('logout')
       </div>
     </div>
   </aside>
+  <div class="sidebar-user">
+  <template v-if="isLoggedIn">
+    <img
+      :src="userProfile.avatarUrl + '?param=40y40'"
+      class="user-avatar"
+      :alt="userProfile.nickname"
+    />
+    <span class="user-name">{{ userProfile.nickname }}</span>
+    <button class="user-logout" @click="logout" title="登出">⏏</button>
+  </template>
+  <template v-else>
+    <button class="login-trigger" @click="showLoginModal = true">
+      👤 登录
+    </button>
+  </template>
+  </div>
 </template>
 
 <style scoped>

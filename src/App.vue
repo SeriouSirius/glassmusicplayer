@@ -359,6 +359,7 @@ onMounted(() => {
   document.addEventListener('keydown', handleKeydown)
   // Set audio element reference
   if (audioEl.value) player.setAudioEl(audioEl.value)
+  auth.initAuth()  // 嘗試恢復登入狀態（替代現有的 player.anonLogin()）
 })
 
 onUnmounted(() => {
