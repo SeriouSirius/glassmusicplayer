@@ -12,10 +12,31 @@ const isLoggedIn = inject('isLoggedIn')
 const userProfile = inject('userProfile')
 const showLoginModal = inject('showLoginModal')
 const logout = inject('logout')
+const createPlaylist = inject('createPlaylist')
 
 const COLLAPSE_LIMIT = 5
 const createdExpanded = ref(false)
 const subscribedExpanded = ref(false)
+
+// Create playlist inline form
+const showCreateInput = ref(false)
+const newPlaylistName = ref('')
+const isCreating = ref(false)
+
+async function submitCreate() {
+  const name = newPlaylistName.value.trim()
+  if (!name || isCreating.value) return
+  isCreating.value = true
+  await createPlaylist(name)
+  isCreating.value = false
+  newPlaylistName.value = ''
+  showCreateInput.value = false
+}
+
+function cancelCreate() {
+  showCreateInput.value = false
+  newPlaylistName.value = ''
+}
 
 const visibleCreated = computed(() =>
   createdExpanded.value ? createdPlaylists.value : createdPlaylists.value.slice(0, COLLAPSE_LIMIT)
@@ -109,8 +130,38 @@ const todayBadge = (() => {
     </div>
 
     <!-- 創建的歌單 -->
-    <div class="nav-section" v-if="createdPlaylists.length">
-      <div class="nav-label">創建的歌單</div>
+    <div class="nav-section">
+      <div class="nav-label nav-label-with-action">
+        <span>創建的歌單</span>
+        <button
+          v-if="isLoggedIn"
+          class="create-playlist-btn"
+          title="新建歌單"
+          @click="showCreateInput = !showCreateInput"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        </button>
+      </div>
+
+      <!-- Inline create form -->
+      <div v-if="showCreateInput" class="create-playlist-form">
+        <input
+          v-model="newPlaylistName"
+          class="create-playlist-input"
+          placeholder="歌單名稱"
+          maxlength="40"
+          autofocus
+          @keydown.enter="submitCreate"
+          @keydown.esc="cancelCreate"
+        />
+        <div class="create-playlist-actions">
+          <button class="btn-create-confirm" :disabled="isCreating || !newPlaylistName.trim()" @click="submitCreate">
+            {{ isCreating ? '創建中…' : '確定' }}
+          </button>
+          <button class="btn-create-cancel" @click="cancelCreate">取消</button>
+        </div>
+      </div>
+
       <div
         class="nav-item playlist-nav-item"
         v-for="pl in visibleCreated"
@@ -129,6 +180,7 @@ const todayBadge = (() => {
         <span class="playlist-nav-name">{{ pl.name }}</span>
         <span class="nav-count" v-if="pl.trackCount">{{ pl.trackCount }}</span>
       </div>
+      <div v-if="!isLoggedIn && !createdPlaylists.length" class="playlist-empty-hint">登入後顯示</div>
       <button
         v-if="createdPlaylists.length > COLLAPSE_LIMIT"
         class="expand-toggle"
@@ -267,6 +319,88 @@ const todayBadge = (() => {
   color: var(--color-text-faint);
 }
 
+/* Section label with action button */
+.nav-label-with-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.create-playlist-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.create-playlist-btn:hover {
+  background: var(--color-surface-offset);
+  color: var(--color-primary);
+}
+
+/* Inline create form */
+.create-playlist-form {
+  padding: 6px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.create-playlist-input {
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font-size: 0.8125rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.create-playlist-input:focus {
+  border-color: var(--color-primary);
+}
+.create-playlist-actions {
+  display: flex;
+  gap: 6px;
+}
+.btn-create-confirm {
+  flex: 1;
+  padding: 4px 0;
+  border-radius: 6px;
+  border: none;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-create-confirm:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+.btn-create-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-create-cancel {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: none;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-create-cancel:hover {
+  background: var(--color-surface-offset);
+}
+
 /* Playlist nav items */
 .playlist-nav-item {
   padding-top: 5px;
@@ -291,6 +425,11 @@ const todayBadge = (() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.8125rem;
+}
+.playlist-empty-hint {
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  color: var(--color-text-faint);
 }
 
 /* Expand/collapse toggle */
