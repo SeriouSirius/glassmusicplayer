@@ -94,7 +94,7 @@ provide('toastMsg', toastMsg)
 provide('mainContent', mainContent)
 provide('player', player)
 provide('like', like)
-// Provide auth 狀態給所有子組件
+// Auth
 provide('isLoggedIn', auth.isLoggedIn)
 provide('userProfile', auth.userProfile)
 provide('showLoginModal', showLoginModal)
@@ -254,6 +254,8 @@ function navigate(v) {
   currentView.value = v
   if (v === 'search') nextTick(() => searchInput.value?.focus())
   if (v === 'toplist' && !toplist.value.length) loadToplist()
+  // 切換到每日推薦時滘覆 dailySongs，由 DailyRecommendView 自行呼叫 API
+  // （DailyRecommendView 內置 onMounted 自動載入，每次切換都重新載入以防止與小時為單伏密碼過期問題）
   nextTick(() => { if (mainContent.value) mainContent.value.scrollTop = 0 })
 }
 provide('navigate', navigate)
@@ -262,7 +264,13 @@ function collectPlaylist() { showToast('歌单已收藏') }
 provide('collectPlaylist', collectPlaylist)
 
 // Play wrapper that integrates with like/recent
-async function playSongWrapper(song, isFm = false) {
+async function playSongWrapper(song, isFm = false, list = null) {
+  // 若傳入每日推薦列表，先設定播放高列表
+  if (list && list.length > 1) {
+    const idx = list.findIndex(s => s.id === song.id)
+    player.playSongsList(list, idx >= 0 ? idx : 0)
+    return
+  }
   const result = await player.playSong(song, isFm)
   if (result?.noSource) showToast(result.msg)
   addToRecent(player.normalizeSong(song))
@@ -355,11 +363,9 @@ onMounted(() => {
   loadDiscover()
   loadHotSearches()
   startBannerRotation()
-  auth.initAuth()  // 嘗試恢復登入狀態（httpOnly Cookie 方案）
+  auth.initAuth()  // 嘗試恢復登入狀態
   document.addEventListener('keydown', handleKeydown)
-  // Set audio element reference
   if (audioEl.value) player.setAudioEl(audioEl.value)
-  auth.initAuth()  // 嘗試恢復登入狀態（替代現有的 player.anonLogin()）
 })
 
 onUnmounted(() => {
