@@ -7,6 +7,11 @@ const likedIds = inject('like').likedIds
 const createdPlaylists = inject('createdPlaylists')
 const playlistDetail = inject('playlistDetail')
 const openPlaylist = inject('openPlaylist')
+// 在現有 inject 中加入：
+const isLoggedIn = inject('isLoggedIn')
+const userProfile = inject('userProfile')
+const showLoginModal = inject('showLoginModal')
+const logout = inject('logout')
 </script>
 
 <template>
@@ -46,4 +51,20 @@ const openPlaylist = inject('openPlaylist')
       </div>
     </div>
   </aside>
+  <div class="sidebar-user">
+  <template v-if="isLoggedIn">
+    <img
+      :src="userProfile.avatarUrl + '?param=40y40'"
+      class="user-avatar"
+      :alt="userProfile.nickname"
+    />
+    <span class="user-name">{{ userProfile.nickname }}</span>
+    <button class="user-logout" @click="logout" title="登出">⏏</button>
+  </template>
+  <template v-else>
+    <button class="login-trigger" @click="showLoginModal = true">
+      👤 登录
+    </button>
+  </template>
+  </div>
 </template>

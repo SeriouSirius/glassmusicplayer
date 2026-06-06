@@ -3,12 +3,19 @@ import { api, getApiBase } from '../api/index.js'
 
 const API = getApiBase()
 
+// Step 1: Try user-selected quality
+// 若未登入或免費帳號，加 unlock=true 以啟用替代音源解鎖
+const isLoggedIn = /* inject 或 import useAuth */ false  // 見下方說明
+
 const currentSong = ref(null)
 const isPlaying = ref(false)
 const playList = ref([])
 const playIndex = ref(-1)
 const playMode = ref(localStorage.getItem('playMode') || 'loop')
 const audioQuality = ref(localStorage.getItem('audioQuality') || 'exhigh')
+const qualityUrl = isLoggedIn
+  ? `/song/url/v1?id=${song.id}&level=${audioQuality.value}`
+  : `/song/url/v1?id=${song.id}&level=${audioQuality.value}&unlock=true`
 const qualityOptions = [
   { value: 'standard', label: '标准' },
   { value: 'higher', label: '较高' },
@@ -91,7 +98,7 @@ async function startPlay() {
 
   // Step 1: Try user-selected quality
   try {
-    const r = await api('/song/url/v1?id=' + song.id + '&level=' + audioQuality.value)
+    const r = await api(qualityUrl)
     if (r?.data?.[0]?.url) {
       played = await tryAudioSrc(r.data[0].url)
       if (played) { _startPlayRunning = false; _consecutiveSkips = 0; loadLyrics(song.id); addToRecent(song); return { noSource: false } }
