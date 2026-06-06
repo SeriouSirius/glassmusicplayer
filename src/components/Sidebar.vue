@@ -52,7 +52,7 @@ const logout = inject('logout')
     <div class="nav-section">
       <div class="nav-label">发现</div>
       <div class="nav-item" :class="{active: currentView === 'discover'}" @click="navigate('discover')">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><span>发现音乐</span>
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><span>发现音樂</span>
       </div>
       <div class="nav-item" :class="{active: currentView === 'toplist'}" @click="navigate('toplist')">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7.5 21H2V9h5.5v12zm7.25-18h-5.5v18h5.5V3zM22 11h-5.5v10H22V11z"/></svg><span>榜单</span>
@@ -66,10 +66,25 @@ const logout = inject('logout')
     </div>
 
     <div class="nav-section">
-      <div class="nav-label">我的音乐</div>
+      <div class="nav-label">我的音樂</div>
+
+      <!-- 每日推薦：僅登入後顯示 -->
+      <div
+        v-if="isLoggedIn"
+        class="nav-item"
+        :class="{active: currentView === 'daily'}"
+        @click="navigate('daily')"
+      >
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/>
+        </svg>
+        <span>每日推薦</span>
+        <span class="nav-badge">{{ new Date().getDate() }}</span>
+      </div>
+
       <div class="nav-item" :class="{active: currentView === 'liked'}" @click="navigate('liked')">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-        <span>我喜欢</span>
+        <span>我喜歡</span>
         <span class="count" v-if="likedIds.size">{{ likedIds.size }}</span>
       </div>
       <div class="nav-item" :class="{active: currentView === 'recent'}" @click="navigate('recent')">
@@ -91,22 +106,6 @@ const logout = inject('logout')
       </div>
     </div>
   </aside>
-  <div class="sidebar-user">
-  <template v-if="isLoggedIn">
-    <img
-      :src="userProfile.avatarUrl + '?param=40y40'"
-      class="user-avatar"
-      :alt="userProfile.nickname"
-    />
-    <span class="user-name">{{ userProfile.nickname }}</span>
-    <button class="user-logout" @click="logout" title="登出">⏏</button>
-  </template>
-  <template v-else>
-    <button class="login-trigger" @click="showLoginModal = true">
-      👤 登录
-    </button>
-  </template>
-  </div>
 </template>
 
 <style scoped>
@@ -184,5 +183,19 @@ const logout = inject('logout')
 .login-trigger-btn:hover {
   background: var(--color-primary-highlight);
   color: var(--color-primary);
+}
+.nav-badge {
+  margin-left: auto;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.625rem;
+  font-weight: 700;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 </style>
