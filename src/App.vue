@@ -165,7 +165,7 @@ async function toggleSubscribePlaylist(playlist) {
   const alreadySubscribed = isPlaylistSubscribed(playlist.id)
   const t = alreadySubscribed ? 2 : 1 // 1 = subscribe, 2 = unsubscribe
   try {
-    const r = await api('/playlist/subscribe?t=' + t + '&id=' + playlist.id)
+    const r = await api('/playlist/subscribe?t=' + t + '&id=' + playlist.id, { method: 'POST' })
     if (r?.code === 200 || r?.code === undefined) {
       if (alreadySubscribed) {
         subscribedPlaylists.value = subscribedPlaylists.value.filter(pl => pl.id !== playlist.id)
