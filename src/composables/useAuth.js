@@ -19,7 +19,6 @@ function isMobileDevice() {
 // ─── 初始化：嘗試恢復登入狀態 ───────────────────────────────
 async function initAuth() {
   try {
-    // 嘗試用現有 Cookie 獲取帳號信息
     const r = await api('/user/account')
     if (r?.account?.id) {
       isLoggedIn.value = true
@@ -30,7 +29,6 @@ async function initAuth() {
       }
     }
   } catch (e) {
-    // Cookie 過期或未登入，靜默失敗
     isLoggedIn.value = false
     userProfile.value = null
   }
@@ -39,22 +37,21 @@ async function initAuth() {
 // ─── 二維碼登入 ─────────────────────────────────────────────
 async function getQrKey() {
   const ts = Date.now()
-  const r = await fetch(`${API}/login/qr/key?timerstamp=${ts}`, { credentials: 'include' })
+  const r = await fetch(`${API}/login/qr/key?timestamp=${ts}`, { credentials: 'include' })
   const d = await r.json()
   return d?.data?.unikey
 }
 
 async function getQrImage(key) {
   const ts = Date.now()
-  const r = await fetch(`${API}/login/qr/create?key=${key}&qrimg=true&timerstamp=${ts}`, { credentials: 'include' })
+  const r = await fetch(`${API}/login/qr/create?key=${key}&qrimg=true&timestamp=${ts}`, { credentials: 'include' })
   const d = await r.json()
-  // qrimg=true 時 data.qrimg 為 base64 data URL
   return d?.data?.qrimg
 }
 
 async function checkQrStatus(key) {
   const ts = Date.now()
-  const r = await fetch(`${API}/login/qr/check?key=${key}&timerstamp=${ts}`, { credentials: 'include' })
+  const r = await fetch(`${API}/login/qr/check?key=${key}&timestamp=${ts}`, { credentials: 'include' })
   const d = await r.json()
   // 800=過期, 801=等待掃碼, 802=待確認, 803=成功
   return { code: d.code, message: d.message }
@@ -64,7 +61,7 @@ async function checkQrStatus(key) {
 async function loginWithPhone(phone, password) {
   isLoading.value = true
   try {
-    const md5pw = md5(password)  // SparkMD5 是同步的，無需 await
+    const md5pw = md5(password)
     const r = await fetch(
       `${API}/login/cellphone?phone=${encodeURIComponent(phone)}&md5_password=${md5pw}`,
       { method: 'GET', credentials: 'include' }
@@ -126,5 +123,4 @@ export function useAuth() {
   }
 }
 
-// 具名導出，供 usePlayer.js 等模組直接 import
 export { isLoggedIn }
