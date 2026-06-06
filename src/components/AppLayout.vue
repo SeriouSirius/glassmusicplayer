@@ -10,6 +10,7 @@ import ToplistView from '../views/ToplistView.vue'
 import FMView from '../views/FMView.vue'
 import LikedView from '../views/LikedView.vue'
 import RecentView from '../views/RecentView.vue'
+import DailyRecommendView from '../views/DailyRecommendView.vue'
 
 const currentView = inject('currentView')
 const isLoading = inject('isLoading')
@@ -38,6 +39,7 @@ const albumDetail = inject('albumDetail')
       <LikedView v-if="currentView === 'liked'" />
       <RecentView v-if="currentView === 'recent'" />
       <FMView v-if="currentView === 'fm'" />
+      <DailyRecommendView v-if="currentView === 'daily'" />
       <div v-if="isLoading" class="loading-wrap"><div class="loading-spinner"></div>加载中...</div>
     </main>
   </div>

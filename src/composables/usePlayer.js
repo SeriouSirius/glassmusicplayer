@@ -198,10 +198,11 @@ async function playPlaylist(id) {
   }
 }
 
-function playSongsList(songs) {
-  if (!songs.length) return
+// Fix: accept startIndex so clicking any row plays the correct song
+function playSongsList(songs, startIndex = 0) {
+  if (!songs || !songs.length) return
   playList.value = songs.map(s => normalizeSong(s))
-  playIndex.value = 0
+  playIndex.value = Math.max(0, Math.min(startIndex, songs.length - 1))
   _consecutiveSkips = 0
   startPlay()
 }

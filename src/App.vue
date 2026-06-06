@@ -94,13 +94,13 @@ provide('toastMsg', toastMsg)
 provide('mainContent', mainContent)
 provide('player', player)
 provide('like', like)
-// Provide auth 狀態給所有子組件
+// Auth
 provide('isLoggedIn', auth.isLoggedIn)
 provide('userProfile', auth.userProfile)
 provide('showLoginModal', showLoginModal)
 provide('logout', auth.logout)
 
-// Helper functions provided
+// Helper functions
 function showToast(m) { toastMsg.value = m; setTimeout(() => toastMsg.value = '', 2500) }
 provide('showToast', showToast)
 
@@ -261,8 +261,14 @@ provide('navigate', navigate)
 function collectPlaylist() { showToast('歌单已收藏') }
 provide('collectPlaylist', collectPlaylist)
 
-// Play wrapper that integrates with like/recent
-async function playSongWrapper(song, isFm = false) {
+// playSongWrapper: 統一播放入口。簽名 (song, isFm?, list?, startIndex?)
+// 若傳入 list，則以 startIndex 為起始位置播放整個列表；否則單曲播放並更新最近播放。
+async function playSongWrapper(song, isFm = false, list = null, startIndex = null) {
+  if (list && list.length > 1) {
+    const idx = startIndex !== null ? startIndex : list.findIndex(s => s.id === song.id)
+    player.playSongsList(list, idx >= 0 ? idx : 0)
+    return
+  }
   const result = await player.playSong(song, isFm)
   if (result?.noSource) showToast(result.msg)
   addToRecent(player.normalizeSong(song))
@@ -341,7 +347,6 @@ function handleKeydown(e) {
   }
 }
 
-// Watch playMode for persistence
 watch(() => player.playMode.value, v => localStorage.setItem('playMode', v))
 watch(showSearchOverlay, v => {
   if (v) nextTick(() => {
@@ -355,11 +360,9 @@ onMounted(() => {
   loadDiscover()
   loadHotSearches()
   startBannerRotation()
-  auth.initAuth()  // 嘗試恢復登入狀態（httpOnly Cookie 方案）
+  auth.initAuth()
   document.addEventListener('keydown', handleKeydown)
-  // Set audio element reference
   if (audioEl.value) player.setAudioEl(audioEl.value)
-  auth.initAuth()  // 嘗試恢復登入狀態（替代現有的 player.anonLogin()）
 })
 
 onUnmounted(() => {
