@@ -9,10 +9,15 @@ import PlayerBar from './components/PlayerBar.vue'
 import LyricsOverlay from './components/LyricsOverlay.vue'
 import SearchOverlay from './components/SearchOverlay.vue'
 import Toast from './components/Toast.vue'
+import { useAuth } from './composables/useAuth.js'
+import LoginModal from './components/LoginModal.vue'
 
 const { isDark, initTheme, toggleTheme } = useTheme()
 const player = usePlayer()
 const like = useLike()
+
+const auth = useAuth()
+const showLoginModal = ref(false)
 
 // App state
 const currentView = ref('discover')
@@ -89,6 +94,11 @@ provide('toastMsg', toastMsg)
 provide('mainContent', mainContent)
 provide('player', player)
 provide('like', like)
+// Provide auth 狀態給所有子組件
+provide('isLoggedIn', auth.isLoggedIn)
+provide('userProfile', auth.userProfile)
+provide('showLoginModal', showLoginModal)
+provide('logout', auth.logout)
 
 // Helper functions provided
 function showToast(m) { toastMsg.value = m; setTimeout(() => toastMsg.value = '', 2500) }
@@ -345,7 +355,7 @@ onMounted(() => {
   loadDiscover()
   loadHotSearches()
   startBannerRotation()
-  player.anonLogin()
+  auth.initAuth()  // 嘗試恢復登入狀態（httpOnly Cookie 方案）
   document.addEventListener('keydown', handleKeydown)
   // Set audio element reference
   if (audioEl.value) player.setAudioEl(audioEl.value)
@@ -370,4 +380,9 @@ onUnmounted(() => {
     @loadedmetadata="player.onLoaded"
     @error="() => { const r = player.onError(); if(r?.error) showToast(r.msg) }"
   ></audio>
+  <LoginModal
+    v-if="showLoginModal"
+    @close="showLoginModal = false"
+    @success="showLoginModal = false"
+  />
 </template>

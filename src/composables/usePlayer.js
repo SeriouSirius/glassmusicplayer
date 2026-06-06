@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { api, getApiBase } from '../api/index.js'
+import { isLoggedIn } from './useAuth.js'
 
 const API = getApiBase()
 
@@ -90,8 +91,12 @@ async function startPlay() {
   let played = false
 
   // Step 1: Try user-selected quality
+  // 若未登入或免費帳號，加 unlock=true 以啟用替代音源解鎖
   try {
-    const r = await api('/song/url/v1?id=' + song.id + '&level=' + audioQuality.value)
+    const qualityUrl = isLoggedIn.value
+      ? `/song/url/v1?id=${song.id}&level=${audioQuality.value}`
+      : `/song/url/v1?id=${song.id}&level=${audioQuality.value}&unlock=true`
+    const r = await api(qualityUrl)
     if (r?.data?.[0]?.url) {
       played = await tryAudioSrc(r.data[0].url)
       if (played) { _startPlayRunning = false; _consecutiveSkips = 0; loadLyrics(song.id); addToRecent(song); return { noSource: false } }
@@ -309,21 +314,6 @@ function setAudioQuality(q) {
   localStorage.setItem('audioQuality', q)
 }
 
-// Anonymous login
-const isAnonLoggedIn = ref(false)
-async function anonLogin() {
-  try {
-    const r = await fetch(API + '/register/anonimous', { method: 'POST' })
-    const d = await r.json()
-    if (d.code === 200 || d.cookie) {
-      isAnonLoggedIn.value = true
-      console.log('Anon login ok')
-    }
-  } catch (e) {
-    console.warn('Anon login fail (non-blocking):', e)
-  }
-}
-
 export function usePlayer() {
   return {
     currentSong,
@@ -343,7 +333,6 @@ export function usePlayer() {
     lyricIndex,
     progressHoverX,
     progressHoverTime,
-    isAnonLoggedIn,
     toastMsg,
     recentSongs,
     currentArtist,
@@ -371,7 +360,6 @@ export function usePlayer() {
     setVolume,
     toggleMute,
     setAudioQuality,
-    anonLogin,
     addToRecent
   }
 }
