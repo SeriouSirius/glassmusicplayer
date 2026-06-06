@@ -127,17 +127,16 @@ function addToRecent(song) {
 }
 provide('addToRecent', addToRecent)
 
-// ── FR-03: Load user playlists ───────────────────────────────────────────────
+// ── FR-03: Load & subscribe user playlists ────────────────────────────────────────
 async function loadUserPlaylists() {
   if (!auth.isLoggedIn.value || !auth.userProfile.value) return
   try {
     const uid = auth.userProfile.value.userId
     const r = await api('/user/playlist?uid=' + uid + '&limit=100')
     if (!r?.playlist) return
-    // First playlist owned by self is always "我喜歡的音樂", skip it here
-    // (it's already shown as the "我喜歡" nav item via useLike)
     const all = r.playlist
     const selfId = uid
+    // Skip the first playlist ("我喜歡的音樂") — handled by useLike
     createdPlaylists.value = all.filter(pl => pl.userId === selfId && pl.id !== all[0]?.id)
     subscribedPlaylists.value = all.filter(pl => pl.userId !== selfId)
   } catch (e) {
@@ -146,7 +145,46 @@ async function loadUserPlaylists() {
 }
 provide('loadUserPlaylists', loadUserPlaylists)
 
-// Watch login state: load on login, clear on logout
+// Returns true if the given playlist id is already in the user's subscribed list
+function isPlaylistSubscribed(id) {
+  return subscribedPlaylists.value.some(pl => pl.id === id)
+}
+provide('isPlaylistSubscribed', isPlaylistSubscribed)
+
+// Toggle subscribe / unsubscribe for a playlist
+async function toggleSubscribePlaylist(playlist) {
+  if (!auth.isLoggedIn.value) {
+    showLoginModal.value = true
+    return
+  }
+  // Cannot subscribe to own playlists
+  if (playlist.userId === auth.userProfile.value?.userId) {
+    showToast('無法收藏自己的歌單')
+    return
+  }
+  const alreadySubscribed = isPlaylistSubscribed(playlist.id)
+  const t = alreadySubscribed ? 2 : 1 // 1 = subscribe, 2 = unsubscribe
+  try {
+    const r = await api('/playlist/subscribe?t=' + t + '&id=' + playlist.id)
+    if (r?.code === 200 || r?.code === undefined) {
+      if (alreadySubscribed) {
+        subscribedPlaylists.value = subscribedPlaylists.value.filter(pl => pl.id !== playlist.id)
+        showToast('已取消收藏')
+      } else {
+        // Prepend with basic info; full details load on next login/refresh
+        subscribedPlaylists.value = [playlist, ...subscribedPlaylists.value]
+        showToast('歌單已加入收藏')
+      }
+    } else {
+      showToast('操作失败，請稍後重試')
+    }
+  } catch (e) {
+    console.error('toggleSubscribePlaylist error:', e)
+    showToast('網路異常，請稍後重試')
+  }
+}
+provide('toggleSubscribePlaylist', toggleSubscribePlaylist)
+
 watch(auth.isLoggedIn, (loggedIn) => {
   if (loggedIn) {
     loadUserPlaylists()
@@ -329,9 +367,6 @@ function navigate(v) {
   nextTick(() => { if (mainContent.value) mainContent.value.scrollTop = 0 })
 }
 provide('navigate', navigate)
-
-function collectPlaylist() { showToast('歌单已收藏') }
-provide('collectPlaylist', collectPlaylist)
 
 async function playSongWrapper(song, isFm = false, list = null, startIndex = null) {
   if (list && list.length > 1) {
