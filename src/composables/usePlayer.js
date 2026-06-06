@@ -16,7 +16,11 @@ const qualityOptions = [
   { value: 'higher', label: '较高' },
   { value: 'exhigh', label: '极高' },
   { value: 'lossless', label: '无损' },
-  { value: 'hires', label: 'Hi-Res' }
+  { value: 'jyeffect', label: '高清环绕声' },
+  { value: 'sky', label: '沉浸环绕声' },
+  { value: 'dolby', label: '杜比全景声' },
+  { value: 'jymaster', label: '超清母带' }
+
 ]
 const qualityLabel = computed(() => qualityOptions.find(q => q.value === audioQuality.value)?.label || '极高')
 const currentTime = ref(0)
