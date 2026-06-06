@@ -79,13 +79,13 @@ const logout = inject('logout')
           <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/>
         </svg>
         <span>每日推薦</span>
-        <span class="nav-badge">{{ new Date().getDate() }}</span>
+        <span class="nav-badge">第{{ new Date().getDate() }}日</span>
       </div>
 
       <div class="nav-item" :class="{active: currentView === 'liked'}" @click="navigate('liked')">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
         <span>我喜歡</span>
-        <span class="count" v-if="likedIds.size">{{ likedIds.size }}</span>
+        <span class="nav-count" v-if="likedIds.size">{{ likedIds.size }}</span>
       </div>
       <div class="nav-item" :class="{active: currentView === 'recent'}" @click="navigate('recent')">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg><span>最近播放</span>
@@ -184,18 +184,29 @@ const logout = inject('logout')
   background: var(--color-primary-highlight);
   color: var(--color-primary);
 }
-.nav-badge {
+
+/* 兩個 badge 統一樣式：margin-left: auto 推到最右 */
+.nav-badge,
+.nav-count {
   margin-left: auto;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+/* 每日推薦：圓形實心 badge */
+.nav-badge {
   background: var(--color-primary);
   color: #fff;
+  padding: 2px 6px;
+  border-radius: 9999px;
   font-size: 0.625rem;
-  font-weight: 700;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+}
+
+/* 我喜歡：純文字數字 */
+.nav-count {
+  color: var(--color-text-faint);
 }
 </style>
