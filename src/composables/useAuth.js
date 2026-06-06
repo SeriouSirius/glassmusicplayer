@@ -64,8 +64,7 @@ async function checkQrStatus(key) {
 async function loginWithPhone(phone, password) {
   isLoading.value = true
   try {
-    // 密碼需要 MD5 加密
-    const md5pw = await md5(password)
+    const md5pw = md5(password)  // 去掉 await，SparkMD5 是同步的
     const r = await fetch(
       `${API}/login/cellphone?phone=${encodeURIComponent(phone)}&md5_password=${md5pw}`,
       { method: 'GET', credentials: 'include' }
@@ -107,18 +106,7 @@ async function logout() {
 
 // ─── MD5 工具（Web Crypto API，無需 npm 包）─────────────────
 async function md5(str) {
-  const encoder = new TextEncoder()
-  const data = encoder.encode(str)
-  const hashBuffer = await crypto.subtle.digest('MD5', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-}
-// 注意：Web Crypto API 不支援 MD5（MD5 不安全）
-// 改用純 JS 實現的 md5，或直接傳明文密碼（api 支援 password 參數）
-// 建議改用 /login/cellphone?phone=xxx&password=yyy（明文，HTTPS 下安全）
-async function md5Plain(str) {
-  // 簡易 fallback：直接返回明文（API 也接受 password 參數）
-  return str
+  return SparkMD5.hash(str)
 }
 
 export function useAuth() {
@@ -137,3 +125,6 @@ export function useAuth() {
     logout
   }
 }
+
+// 具名導出，供 usePlayer.js 等模組直接 import
+export { isLoggedIn }

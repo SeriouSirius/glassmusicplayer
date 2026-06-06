@@ -1,11 +1,9 @@
 import { ref, computed } from 'vue'
 import { api, getApiBase } from '../api/index.js'
+import { isLoggedIn } from './useAuth.js'
 
 const API = getApiBase()
-
-// Step 1: Try user-selected quality
-// 若未登入或免費帳號，加 unlock=true 以啟用替代音源解鎖
-const isLoggedIn = /* inject 或 import useAuth */ false  // 見下方說明
+// 下一行是 currentSong，不再有任何 qualityUrl 相關常量
 
 const currentSong = ref(null)
 const isPlaying = ref(false)
@@ -13,9 +11,6 @@ const playList = ref([])
 const playIndex = ref(-1)
 const playMode = ref(localStorage.getItem('playMode') || 'loop')
 const audioQuality = ref(localStorage.getItem('audioQuality') || 'exhigh')
-const qualityUrl = isLoggedIn
-  ? `/song/url/v1?id=${song.id}&level=${audioQuality.value}`
-  : `/song/url/v1?id=${song.id}&level=${audioQuality.value}&unlock=true`
 const qualityOptions = [
   { value: 'standard', label: '标准' },
   { value: 'higher', label: '较高' },
@@ -96,14 +91,17 @@ async function startPlay() {
 
   let played = false
 
-  // Step 1: Try user-selected quality
-  try {
-    const r = await api(qualityUrl)
-    if (r?.data?.[0]?.url) {
-      played = await tryAudioSrc(r.data[0].url)
-      if (played) { _startPlayRunning = false; _consecutiveSkips = 0; loadLyrics(song.id); addToRecent(song); return { noSource: false } }
-    }
-  } catch (e) { /* continue to fallback */ }
+// Step 1: Try user-selected quality
+try {
+  const qualityUrl = isLoggedIn.value
+    ? `/song/url/v1?id=${song.id}&level=${audioQuality.value}`
+    : `/song/url/v1?id=${song.id}&level=${audioQuality.value}&unlock=true`
+  const r = await api(qualityUrl)
+  if (r?.data?.[0]?.url) {
+    played = await tryAudioSrc(r.data[0].url)
+    if (played) { _startPlayRunning = false; _consecutiveSkips = 0; loadLyrics(song.id); addToRecent(song); return { noSource: false } }
+  }
+} catch (e) { /* continue to fallback */ }
 
   // Step 2: Try grey song match (UnblockNeteaseMusic)
   // Note: /song/url/match returns data as a plain URL string, NOT an array like /song/url/v1
