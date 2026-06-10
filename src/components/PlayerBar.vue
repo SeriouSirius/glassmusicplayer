@@ -139,7 +139,7 @@ function coverUrl(song) {
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 200;
+  z-index: 600;   /* must be > lo-root (500) so pill floats above LyricsOverlay */
   display: flex;
   align-items: center;
   gap: 10px;
@@ -281,7 +281,7 @@ function coverUrl(song) {
   background: var(--glass-bg-heavy);
   backdrop-filter: var(--glass-blur-heavy); -webkit-backdrop-filter: var(--glass-blur-heavy);
   border: 1px solid var(--glass-border); border-radius: 14px; overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.18); z-index: 300; min-width: 84px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18); z-index: 700; min-width: 84px;
   animation: menuIn 0.18s ease;
 }
 @keyframes menuIn { from { opacity:0; transform: translateY(4px); } to { opacity:1; transform: translateY(0); } }

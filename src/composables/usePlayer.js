@@ -26,14 +26,13 @@ const duration = ref(0)
 const volume = ref(parseFloat(localStorage.getItem('volume') || '0.8'))
 const showLyrics = ref(false)
 const lyrics = ref('')
-// parsedLyrics: array of { time, text, words?: [{time, duration, text}] }
 const parsedLyrics = ref([])
 const isWordLevel = ref(false)
 const lyricIndex = ref(-1)
 const progressHoverX = ref(-1)
 const progressHoverTime = ref(0)
 const toastMsg = ref('')
-// Large cover URL for lyrics overlay (fetched on song change)
+// Large cover URL for lyrics overlay — reset to '' on each new song
 const lyricsCoverUrl = ref('')
 
 let audioEl = null
@@ -70,10 +69,13 @@ function normalizeSong(s) {
 
 function showToast(m) { toastMsg.value = m; setTimeout(() => toastMsg.value = '', 2500) }
 
+// Fetch a high-res (512px) cover for the lyrics overlay.
+// Resets lyricsCoverUrl before fetching so the overlay shows the
+// regular thumbnail immediately, then upgrades once resolved.
 async function fetchLargecover(song) {
-  // Try to get larger cover via album detail
+  lyricsCoverUrl.value = '' // reset first so overlay uses thumbnail during load
   const picUrl = song.al?.picUrl || song.album?.picUrl || song.picUrl
-  if (!picUrl) { lyricsCoverUrl.value = ''; return }
+  if (!picUrl) return
   const base = picUrl.split('?')[0]
   lyricsCoverUrl.value = base + '?param=512y512'
 }
@@ -97,7 +99,11 @@ async function startPlay() {
   const song = playList.value[playIndex.value]
   if (!song) { _startPlayRunning = false; return }
   currentSong.value = song
+  // Reset cover & lyrics immediately on new song
   lyricsCoverUrl.value = ''
+  parsedLyrics.value = []
+  isWordLevel.value = false
+  lyricIndex.value = -1
 
   let played = false
   try {
@@ -109,7 +115,10 @@ async function startPlay() {
       played = await tryAudioSrc(r.data[0].url)
       if (played) {
         _startPlayRunning = false; _consecutiveSkips = 0
-        loadLyrics(song.id); fetchLargecover(song); addToRecent(song)
+        // Fire both in parallel — no need to await
+        loadLyrics(song.id)
+        fetchLargecover(song)
+        addToRecent(song)
         return { noSource: false }
       }
     }
@@ -123,7 +132,9 @@ async function startPlay() {
       if (played) {
         _startPlayRunning = false; _consecutiveSkips = 0
         showToast('已匹配替代音源')
-        loadLyrics(song.id); fetchLargecover(song); addToRecent(song)
+        loadLyrics(song.id)
+        fetchLargecover(song)
+        addToRecent(song)
         return { noSource: false }
       }
     }
@@ -202,11 +213,6 @@ function addToRecent(song) {
 
 // ── Lyrics ────────────────────────────────────────────────────────────────────
 
-/**
- * Parse YRC (word-level JSON lyrics from /lyric/new yrc field)
- * Format per line: {"t":12340,"c":[{"tx":"word","x":500},{"tx":"word2","x":600}]}
- * Returns array of { time (seconds), text (full line), words: [{time, duration, text}] }
- */
 function parseYrc(yrcStr) {
   const lines = yrcStr.split('\n').filter(l => l.trim().startsWith('{'))
   const result = []
@@ -229,9 +235,6 @@ function parseYrc(yrcStr) {
   return result
 }
 
-/**
- * Parse standard LRC string into array of { time, text }
- */
 function parseLrcStr(lrc) {
   const lines = lrc.split('\n')
   const result = []
@@ -252,7 +255,6 @@ function parseLrcStr(lrc) {
 async function loadLyrics(id) {
   parsedLyrics.value = []; isWordLevel.value = false; lyrics.value = ''
   try {
-    // Step 1: try word-level /lyric/new
     const rNew = await api('/lyric/new?id=' + id).catch(() => null)
     if (rNew?.yrc?.lyric) {
       const parsed = parseYrc(rNew.yrc.lyric)
@@ -263,18 +265,14 @@ async function loadLyrics(id) {
         return
       }
     }
-    // Step 2: fallback to line-level /lyric
     const r = await api('/lyric?id=' + id).catch(() => null)
     if (r?.lrc?.lyric) {
       lyrics.value = r.lrc.lyric
       parsedLyrics.value = parseLrcStr(r.lrc.lyric)
-    } else {
-      parsedLyrics.value = []
     }
   } catch (e) { parsedLyrics.value = [] }
 }
 
-// Keep parseLyrics as alias for external callers
 function parseLyrics(lrc) { parsedLyrics.value = parseLrcStr(lrc) }
 
 function onTimeUpdate() {
