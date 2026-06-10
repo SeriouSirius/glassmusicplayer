@@ -99,8 +99,8 @@ async function startPlay() {
   // 若未登入或免費帳號，加 unlock=true 以啟用替代音源解鎖
   try {
     const qualityUrl = isLoggedIn.value
-      ? `/song/url/v1?id=${song.id}&level=${audioQuality.value}`
-      : `/song/url/v1?id=${song.id}&level=${audioQuality.value}&unlock=true`
+      ? `/song/url/v1?id=${song.id}&level=${audioQuality.value}&randomCNIP=true`
+      : `/song/url/v1?id=${song.id}&level=${audioQuality.value}&unlock=true&randomCNIP=true`
     const r = await api(qualityUrl)
     if (r?.data?.[0]?.url) {
       played = await tryAudioSrc(r.data[0].url)
@@ -111,7 +111,7 @@ async function startPlay() {
   // Step 2: Try grey song match (UnblockNeteaseMusic)
   // Note: /song/url/match returns data as a plain URL string, NOT an array like /song/url/v1
   try {
-    const r = await api('/song/url/match?id=' + song.id)
+    const r = await api('/song/url/match?id=' + song.id + '&randomCNIP=true')
     const matchUrl = typeof r?.data === 'string' ? r.data : r?.data?.[0]?.url
     if (matchUrl) {
       played = await tryAudioSrc(matchUrl)
