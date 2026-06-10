@@ -172,7 +172,7 @@ async function toggleSubscribePlaylist(playlist) {
   const alreadySubscribed = isPlaylistSubscribed(playlist.id)
   const t = alreadySubscribed ? 2 : 1 // 1 = subscribe, 2 = unsubscribe
   try {
-    const r = await api('/playlist/subscribe?t=' + t + '&id=' + playlist.id, { method: 'POST' })
+    const r = await api('/playlist/subscribe?t=' + t + '&id=' + playlist.id + '&randomCNIP=true', { method: 'POST' })
     // Debug: log raw response to help diagnose 405 issues
     console.log('[toggleSubscribePlaylist] raw response:', JSON.stringify(r))
     if (r?.code === 200 || r?.code === undefined) {
