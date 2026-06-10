@@ -3,7 +3,6 @@ import { api, getApiBase } from '../api/index.js'
 import { isLoggedIn } from './useAuth.js'
 
 const API = getApiBase()
-// 下一行是 currentSong，不再有任何 qualityUrl 相關常量
 
 const currentSong = ref(null)
 const isPlaying = ref(false)
@@ -20,7 +19,6 @@ const qualityOptions = [
   { value: 'sky', label: '沉浸环绕声' },
   { value: 'dolby', label: '杜比全景声' },
   { value: 'jymaster', label: '超清母带' }
-
 ]
 const qualityLabel = computed(() => qualityOptions.find(q => q.value === audioQuality.value)?.label || '极高')
 const currentTime = ref(0)
@@ -28,17 +26,19 @@ const duration = ref(0)
 const volume = ref(parseFloat(localStorage.getItem('volume') || '0.8'))
 const showLyrics = ref(false)
 const lyrics = ref('')
+// parsedLyrics: array of { time, text, words?: [{time, duration, text}] }
 const parsedLyrics = ref([])
+const isWordLevel = ref(false)
 const lyricIndex = ref(-1)
 const progressHoverX = ref(-1)
 const progressHoverTime = ref(0)
 const toastMsg = ref('')
+// Large cover URL for lyrics overlay (fetched on song change)
+const lyricsCoverUrl = ref('')
 
-// Audio element ref - will be set by PlayerBar
 let audioEl = null
 function setAudioEl(el) { audioEl = el }
 
-// Guard: prevent re-entry & limit consecutive skips
 let _startPlayRunning = false
 let _consecutiveSkips = 0
 const MAX_CONSECUTIVE_SKIPS = 3
@@ -49,8 +49,12 @@ const currentArtist = computed(() => {
   return a?.map(x => x.name).join(' / ') || ''
 })
 
-const progressPercent = computed(() => duration.value ? (currentTime.value / duration.value) * 100 : 0)
+const currentAlbum = computed(() => {
+  if (!currentSong.value) return ''
+  return currentSong.value.al?.name || currentSong.value.album?.name || ''
+})
 
+const progressPercent = computed(() => duration.value ? (currentTime.value / duration.value) * 100 : 0)
 const playModeText = computed(() => ({ loop: '列表循环', shuffle: '随机播放', single: '单曲循环' }[playMode.value]))
 
 function normalizeSong(s) {
@@ -66,37 +70,36 @@ function normalizeSong(s) {
 
 function showToast(m) { toastMsg.value = m; setTimeout(() => toastMsg.value = '', 2500) }
 
+async function fetchLargecover(song) {
+  // Try to get larger cover via album detail
+  const picUrl = song.al?.picUrl || song.album?.picUrl || song.picUrl
+  if (!picUrl) { lyricsCoverUrl.value = ''; return }
+  const base = picUrl.split('?')[0]
+  lyricsCoverUrl.value = base + '?param=512y512'
+}
+
 async function playSong(song, isFm = false) {
   const n = normalizeSong(song)
   if (isFm) {
-    playList.value = [n]
-    playIndex.value = 0
+    playList.value = [n]; playIndex.value = 0
   } else {
     const idx = playList.value.findIndex(s => s.id === n.id)
-    if (idx === -1) {
-      playList.value.push(n)
-      playIndex.value = playList.value.length - 1
-    } else {
-      playIndex.value = idx
-    }
+    if (idx === -1) { playList.value.push(n); playIndex.value = playList.value.length - 1 }
+    else { playIndex.value = idx }
   }
   _consecutiveSkips = 0
   await startPlay()
 }
 
 async function startPlay() {
-  // Prevent re-entry
   if (_startPlayRunning) return
   _startPlayRunning = true
-
   const song = playList.value[playIndex.value]
   if (!song) { _startPlayRunning = false; return }
   currentSong.value = song
+  lyricsCoverUrl.value = ''
 
   let played = false
-
-  // Step 1: Try user-selected quality
-  // 若未登入或免費帳號，加 unlock=true 以啟用替代音源解鎖
   try {
     const qualityUrl = isLoggedIn.value
       ? `/song/url/v1?id=${song.id}&level=${audioQuality.value}&randomCNIP=true`
@@ -104,12 +107,14 @@ async function startPlay() {
     const r = await api(qualityUrl)
     if (r?.data?.[0]?.url) {
       played = await tryAudioSrc(r.data[0].url)
-      if (played) { _startPlayRunning = false; _consecutiveSkips = 0; loadLyrics(song.id); addToRecent(song); return { noSource: false } }
+      if (played) {
+        _startPlayRunning = false; _consecutiveSkips = 0
+        loadLyrics(song.id); fetchLargecover(song); addToRecent(song)
+        return { noSource: false }
+      }
     }
-  } catch (e) { /* continue to fallback */ }
+  } catch (e) {}
 
-  // Step 2: Try grey song match (UnblockNeteaseMusic)
-  // Note: /song/url/match returns data as a plain URL string, NOT an array like /song/url/v1
   try {
     const r = await api('/song/url/match?id=' + song.id + '&randomCNIP=true')
     const matchUrl = typeof r?.data === 'string' ? r.data : r?.data?.[0]?.url
@@ -118,53 +123,36 @@ async function startPlay() {
       if (played) {
         _startPlayRunning = false; _consecutiveSkips = 0
         showToast('已匹配替代音源')
-        loadLyrics(song.id); addToRecent(song)
+        loadLyrics(song.id); fetchLargecover(song); addToRecent(song)
         return { noSource: false }
       }
     }
-  } catch (e) { /* all sources failed */ }
+  } catch (e) {}
 
-  // All sources exhausted for this song
   _startPlayRunning = false
   _consecutiveSkips++
-
   if (_consecutiveSkips >= MAX_CONSECUTIVE_SKIPS) {
-    // Too many consecutive skips — stop to prevent infinite loop
-    showToast('连续多首暂无音源，已停止播放')
-    _consecutiveSkips = 0
+    showToast('连续多首暂无音源，已停止播放'); _consecutiveSkips = 0
     return { noSource: true, msg: '连续多首暂无音源，已停止播放' }
   }
-
   showToast('暂无音源，自动切换下一首')
-  // Use nextTick to avoid synchronous recursion
   setTimeout(() => nextSong(), 300)
   return { noSource: true, msg: '暂无音源，自动切换下一首' }
 }
 
 async function tryAudioSrc(url) {
   if (!url) return false
-  audioEl.src = url
-  audioEl.volume = volume.value
-  audioEl.load()
+  audioEl.src = url; audioEl.volume = volume.value; audioEl.load()
   try {
-    await audioEl.play()
-    isPlaying.value = true
-    return true
+    await audioEl.play(); isPlaying.value = true; return true
   } catch (e) {
-    // Autoplay blocked by browser — source is valid, just needs user click
-    isPlaying.value = false
-    showToast('点击播放按钮开始播放')
-    return true // source exists, not a source problem
+    isPlaying.value = false; showToast('点击播放按钮开始播放'); return true
   }
 }
 
 function togglePlay() {
-  if (isPlaying.value) {
-    audioEl.pause()
-    isPlaying.value = false
-  } else {
-    audioEl.play().then(() => isPlaying.value = true).catch(() => {})
-  }
+  if (isPlaying.value) { audioEl.pause(); isPlaying.value = false }
+  else { audioEl.play().then(() => isPlaying.value = true).catch(() => {}) }
 }
 
 function prevSong() {
@@ -177,41 +165,31 @@ function prevSong() {
 
 function nextSong() {
   if (!playList.value.length) return
-  // Don't reset _consecutiveSkips here — let startPlay track consecutive failures
   if (playMode.value === 'shuffle') playIndex.value = Math.floor(Math.random() * playList.value.length)
   else playIndex.value = (playIndex.value + 1) % playList.value.length
   startPlay()
 }
 
-function manualNextSong() {
-  _consecutiveSkips = 0
-  nextSong()
-}
+function manualNextSong() { _consecutiveSkips = 0; nextSong() }
 
 async function playPlaylist(id) {
   try {
     const r = await api('/playlist/track/all?id=' + id + '&limit=200')
     if (r?.songs) {
       playList.value = r.songs.map(s => normalizeSong(s))
-      playIndex.value = 0
-      _consecutiveSkips = 0
+      playIndex.value = 0; _consecutiveSkips = 0
       await startPlay()
     }
-  } catch (e) {
-    return { error: true, msg: '播放歌单失败' }
-  }
+  } catch (e) { return { error: true, msg: '播放歌单失败' } }
 }
 
-// Fix: accept startIndex so clicking any row plays the correct song
 function playSongsList(songs, startIndex = 0) {
   if (!songs || !songs.length) return
   playList.value = songs.map(s => normalizeSong(s))
   playIndex.value = Math.max(0, Math.min(startIndex, songs.length - 1))
-  _consecutiveSkips = 0
-  startPlay()
+  _consecutiveSkips = 0; startPlay()
 }
 
-// Recent songs
 const recentSongs = ref(JSON.parse(localStorage.getItem('recentSongs') || '[]'))
 
 function addToRecent(song) {
@@ -222,22 +200,39 @@ function addToRecent(song) {
   localStorage.setItem('recentSongs', JSON.stringify(recentSongs.value))
 }
 
-// Lyrics
-async function loadLyrics(id) {
-  try {
-    const r = await api('/lyric?id=' + id)
-    if (r?.lrc?.lyric) {
-      lyrics.value = r.lrc.lyric
-      parseLyrics(r.lrc.lyric)
-    } else {
-      parsedLyrics.value = []
-    }
-  } catch (e) {
-    parsedLyrics.value = []
+// ── Lyrics ────────────────────────────────────────────────────────────────────
+
+/**
+ * Parse YRC (word-level JSON lyrics from /lyric/new yrc field)
+ * Format per line: {"t":12340,"c":[{"tx":"word","x":500},{"tx":"word2","x":600}]}
+ * Returns array of { time (seconds), text (full line), words: [{time, duration, text}] }
+ */
+function parseYrc(yrcStr) {
+  const lines = yrcStr.split('\n').filter(l => l.trim().startsWith('{'))
+  const result = []
+  for (const l of lines) {
+    try {
+      const obj = JSON.parse(l)
+      if (!obj.c?.length) continue
+      const lineTime = obj.t / 1000
+      const words = []
+      let fullText = ''
+      for (const w of obj.c) {
+        if (!w.tx?.trim()) continue
+        words.push({ time: (obj.t + (w.t || 0)) / 1000, duration: (w.x || 500) / 1000, text: w.tx })
+        fullText += w.tx
+      }
+      if (fullText.trim()) result.push({ time: lineTime, text: fullText.trim(), words })
+    } catch (e) {}
   }
+  result.sort((a, b) => a.time - b.time)
+  return result
 }
 
-function parseLyrics(lrc) {
+/**
+ * Parse standard LRC string into array of { time, text }
+ */
+function parseLrcStr(lrc) {
   const lines = lrc.split('\n')
   const result = []
   const reg = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/g
@@ -247,21 +242,46 @@ function parseLyrics(lrc) {
     if (!txt) continue
     for (const m of ts) {
       const t = parseInt(m[1]) * 60 + parseInt(m[2]) + parseInt(m[3]) / (m[3].length === 2 ? 100 : 1000)
-      result.push({ time: t, text: txt })
+      result.push({ time: t, text: txt, words: null })
     }
   }
   result.sort((a, b) => a.time - b.time)
-  parsedLyrics.value = result
+  return result
 }
 
-// Audio events
+async function loadLyrics(id) {
+  parsedLyrics.value = []; isWordLevel.value = false; lyrics.value = ''
+  try {
+    // Step 1: try word-level /lyric/new
+    const rNew = await api('/lyric/new?id=' + id).catch(() => null)
+    if (rNew?.yrc?.lyric) {
+      const parsed = parseYrc(rNew.yrc.lyric)
+      if (parsed.length) {
+        parsedLyrics.value = parsed
+        isWordLevel.value = true
+        lyrics.value = rNew.yrc.lyric
+        return
+      }
+    }
+    // Step 2: fallback to line-level /lyric
+    const r = await api('/lyric?id=' + id).catch(() => null)
+    if (r?.lrc?.lyric) {
+      lyrics.value = r.lrc.lyric
+      parsedLyrics.value = parseLrcStr(r.lrc.lyric)
+    } else {
+      parsedLyrics.value = []
+    }
+  } catch (e) { parsedLyrics.value = [] }
+}
+
+// Keep parseLyrics as alias for external callers
+function parseLyrics(lrc) { parsedLyrics.value = parseLrcStr(lrc) }
+
 function onTimeUpdate() {
   currentTime.value = audioEl.currentTime
   for (let i = parsedLyrics.value.length - 1; i >= 0; i--) {
     if (currentTime.value >= parsedLyrics.value[i].time) {
-      if (lyricIndex.value !== i) {
-        lyricIndex.value = i
-      }
+      if (lyricIndex.value !== i) lyricIndex.value = i
       break
     }
   }
@@ -270,20 +290,12 @@ function onTimeUpdate() {
 function onEnded() {
   _consecutiveSkips = 0
   if (playMode.value === 'single') {
-    audioEl.currentTime = 0
-    audioEl.play().then(() => isPlaying.value = true).catch(() => {})
-  } else {
-    nextSong()
-  }
+    audioEl.currentTime = 0; audioEl.play().then(() => isPlaying.value = true).catch(() => {})
+  } else { nextSong() }
 }
 
-function onLoaded() {
-  duration.value = audioEl.duration
-}
-
-function onError() {
-  return { error: true, msg: '播放出错' }
-}
+function onLoaded() { duration.value = audioEl.duration }
+function onError() { return { error: true, msg: '播放出错' } }
 
 function seekTo(e, progressBar) {
   if (!progressBar || !duration.value) return
@@ -297,75 +309,41 @@ function onProgressHover(e, progressBar) {
   const r = progressBar.getBoundingClientRect()
   const x = e.clientX - r.left
   const p = Math.max(0, Math.min(x / r.width, 1))
-  progressHoverX.value = x
-  progressHoverTime.value = p * duration.value
+  progressHoverX.value = x; progressHoverTime.value = p * duration.value
 }
 
 function setVolume(e, volumeBar) {
   if (!volumeBar) return
   const r = volumeBar.getBoundingClientRect()
   volume.value = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width))
-  audioEl.volume = volume.value
-  localStorage.setItem('volume', volume.value)
+  audioEl.volume = volume.value; localStorage.setItem('volume', volume.value)
 }
 
 function toggleMute() {
   volume.value = volume.value > 0 ? 0 : 0.8
-  audioEl.volume = volume.value
-  localStorage.setItem('volume', volume.value)
+  audioEl.volume = volume.value; localStorage.setItem('volume', volume.value)
 }
 
 function setAudioQuality(q) {
-  audioQuality.value = q
-  localStorage.setItem('audioQuality', q)
+  audioQuality.value = q; localStorage.setItem('audioQuality', q)
 }
 
 export function usePlayer() {
   return {
-    currentSong,
-    isPlaying,
-    playList,
-    playIndex,
-    playMode,
-    audioQuality,
-    qualityOptions,
-    qualityLabel,
-    currentTime,
-    duration,
-    volume,
-    showLyrics,
-    lyrics,
-    parsedLyrics,
-    lyricIndex,
-    progressHoverX,
-    progressHoverTime,
-    toastMsg,
-    recentSongs,
-    currentArtist,
-    progressPercent,
-    playModeText,
-    setAudioEl,
-    normalizeSong,
-    showToast,
-    playSong,
-    startPlay,
-    togglePlay,
-    prevSong,
-    nextSong,
-    manualNextSong,
-    playPlaylist,
-    playSongsList,
-    loadLyrics,
-    parseLyrics,
-    onTimeUpdate,
-    onEnded,
-    onLoaded,
-    onError,
-    seekTo,
-    onProgressHover,
-    setVolume,
-    toggleMute,
-    setAudioQuality,
+    currentSong, isPlaying, playList, playIndex, playMode,
+    audioQuality, qualityOptions, qualityLabel,
+    currentTime, duration, volume,
+    showLyrics, lyrics, parsedLyrics, isWordLevel, lyricIndex,
+    progressHoverX, progressHoverTime, toastMsg,
+    recentSongs, lyricsCoverUrl,
+    currentArtist, currentAlbum, progressPercent, playModeText,
+    setAudioEl, normalizeSong, showToast,
+    playSong, startPlay, togglePlay,
+    prevSong, nextSong, manualNextSong,
+    playPlaylist, playSongsList,
+    loadLyrics, parseLyrics,
+    onTimeUpdate, onEnded, onLoaded, onError,
+    seekTo, onProgressHover, setVolume, toggleMute, setAudioQuality,
     addToRecent
   }
 }
