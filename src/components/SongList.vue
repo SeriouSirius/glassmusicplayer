@@ -34,7 +34,7 @@ function handleToggleLike(song) {
       :class="{ playing: player.currentSong.value?.id === song.id }"
       v-for="(song, i) in songs"
       :key="song.id"
-      @dblclick="playSong(song)"
+      @click="playSong(song)"
     >
       <span class="song-index">{{ i + 1 }}</span>
       <img class="song-cover" :src="getSongCover(song)" referrerpolicy="no-referrer" loading="lazy">

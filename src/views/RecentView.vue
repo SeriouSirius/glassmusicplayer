@@ -22,13 +22,13 @@ function getSongArtist(s) {
     <div class="page-header">
       <h1 class="page-title">最近播放</h1>
     </div>
-    <div class="song-list">
+    <div class="song-list" v-if="recentSongs?.length">
       <div
         class="song-item"
         :class="{ playing: player.currentSong.value?.id === song.id }"
-        v-for="(song, i) in recentSongs.value"
+        v-for="(song, i) in recentSongs"
         :key="song.id"
-        @dblclick="playSong(song)"
+        @click="playSong(song)"
       >
         <span class="song-index">{{ i + 1 }}</span>
         <img class="song-cover" :src="getSongCover(song)" referrerpolicy="no-referrer" loading="lazy">
@@ -39,7 +39,7 @@ function getSongArtist(s) {
         <div class="song-duration">{{ formatDuration(song.dt || song.duration) }}</div>
       </div>
     </div>
-    <div class="empty-state" v-if="!recentSongs.value?.length">
+    <div class="empty-state" v-else>
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7v4l5-5-5-5v4z"/></svg>
       <p>还没有播放记录</p>
     </div>

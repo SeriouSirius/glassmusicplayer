@@ -11,6 +11,7 @@ const bannerIndex = inject('bannerIndex')
 const newSongs = inject('newSongs')
 const showSearchOverlay = inject('showSearchOverlay')
 const navigate = inject('navigate')
+const recommendPlaylists = inject('recommendPlaylists')
 </script>
 
 <template>
@@ -33,7 +34,7 @@ const navigate = inject('navigate')
       <h2 class="section-title">推荐歌单</h2>
       <span class="section-more" @click="navigate('search')">查看更多</span>
     </div>
-    <PlaylistGrid />
+    <PlaylistGrid :playlists="recommendPlaylists" />
   </div>
   <div class="section">
     <div class="section-header"><h2 class="section-title">新歌速递</h2></div>
