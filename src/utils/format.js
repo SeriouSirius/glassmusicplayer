@@ -21,3 +21,16 @@ export function highlightText(t, q) {
   const r = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi')
   return t.replace(r, '<span style="color:var(--accent);font-weight:600">$1</span>')
 }
+
+/**
+ * Append NetEase image resize param.
+ * @param {string} url  - raw picUrl
+ * @param {number} size - pixel size (square). e.g. 40, 200, 400
+ * @returns {string}
+ */
+export function imgUrl(url, size) {
+  if (!url) return ''
+  // avoid double-appending
+  const base = url.split('?')[0]
+  return `${base}?param=${size}y${size}`
+}

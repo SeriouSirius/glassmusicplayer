@@ -1,6 +1,6 @@
 <script setup>
 import { inject, ref, onMounted, onBeforeUnmount } from 'vue'
-import { formatTime } from '../utils/format.js'
+import { formatTime, imgUrl } from '../utils/format.js'
 
 const player = inject('player')
 const like = inject('like')
@@ -35,6 +35,10 @@ function handleClickOutside(e) {
 }
 onMounted(() => document.addEventListener('click', handleClickOutside))
 onBeforeUnmount(() => document.removeEventListener('click', handleClickOutside))
+
+function coverUrl(song) {
+  return imgUrl(song.al?.picUrl || song.album?.picUrl || song.picUrl, 40)
+}
 </script>
 
 <template>
@@ -54,11 +58,10 @@ onBeforeUnmount(() => document.removeEventListener('click', handleClickOutside))
 
     <!-- Active playback -->
     <template v-else>
-      <!-- Left: cover + song info + like -->
       <div class="pill-song">
         <img
           class="pill-cover" :class="{ spinning: player.isPlaying.value }"
-          :src="player.currentSong.value.al?.picUrl || player.currentSong.value.album?.picUrl || player.currentSong.value.picUrl"
+          :src="coverUrl(player.currentSong.value)"
           referrerpolicy="no-referrer" alt=""
           @click="player.showLyrics.value = true"
         />
@@ -71,7 +74,6 @@ onBeforeUnmount(() => document.removeEventListener('click', handleClickOutside))
         </button>
       </div>
 
-      <!-- Centre: progress -->
       <div class="pill-progress-row" @mousemove="handleProgressHover" @mouseleave="player.progressHoverX.value = -1">
         <span class="pill-time">{{ formatTime(player.currentTime.value) }}</span>
         <div class="pill-progress" @click="handleSeekTo" ref="progressBar">
@@ -85,7 +87,6 @@ onBeforeUnmount(() => document.removeEventListener('click', handleClickOutside))
         <span class="pill-time">{{ formatTime(player.duration.value) }}</span>
       </div>
 
-      <!-- Right: controls + volume + quality -->
       <div class="pill-controls">
         <button class="pill-btn" @click="player.playMode.value = player.playMode.value === 'loop' ? 'shuffle' : player.playMode.value === 'shuffle' ? 'single' : 'loop'" :title="player.playModeText.value">
           <svg v-if="player.playMode.value === 'loop'" viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
@@ -102,7 +103,7 @@ onBeforeUnmount(() => document.removeEventListener('click', handleClickOutside))
         <button class="pill-btn" @click="player.manualNextSong" title="下一首">
           <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
         </button>
-        <button class="pill-btn" @click="player.showLyrics.value = !player.showLyrics.value" title="歌詞">
+        <button class="pill-btn" @click="player.showLyrics.value = !player.showLyrics.value" title="歌词">
           <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
         </button>
 
@@ -133,7 +134,6 @@ onBeforeUnmount(() => document.removeEventListener('click', handleClickOutside))
 </template>
 
 <style scoped>
-/* ── Pill shell ────────────────────────────────────────────── */
 .player-pill {
   position: fixed;
   bottom: 24px;
@@ -145,23 +145,19 @@ onBeforeUnmount(() => document.removeEventListener('click', handleClickOutside))
   gap: 10px;
   padding: 9px 14px;
   border-radius: 9999px;
-  /* Liquid glass: layered rgba + backdrop blur + subtle inner highlight */
   background: var(--glass-bg-heavy);
   backdrop-filter: var(--glass-blur-heavy);
   -webkit-backdrop-filter: var(--glass-blur-heavy);
   border: 1px solid var(--glass-border);
-  /* Outer glow + depth shadow */
   box-shadow:
-    0 2px 0 0 rgba(255,255,255,0.55) inset,     /* top highlight */
-    0 -1px 0 0 rgba(255,255,255,0.12) inset,    /* bottom inner */
+    0 2px 0 0 rgba(255,255,255,0.55) inset,
+    0 -1px 0 0 rgba(255,255,255,0.12) inset,
     0 8px 32px rgba(31,38,135,0.16),
     0 2px 8px rgba(0,0,0,0.08);
   max-width: min(860px, calc(100vw - 48px));
   min-width: 300px;
-  /* Noise/grain overlay via pseudo-element */
   isolation: isolate;
 }
-/* Grain texture */
 .player-pill::before {
   content: '';
   position: absolute;
@@ -172,48 +168,29 @@ onBeforeUnmount(() => document.removeEventListener('click', handleClickOutside))
   pointer-events: none;
   z-index: -1;
 }
-
 [data-theme="dark"] .player-pill {
   box-shadow:
     0 1px 0 0 rgba(255,255,255,0.10) inset,
     0 8px 32px rgba(0,0,0,0.45),
     0 2px 8px rgba(0,0,0,0.25);
 }
-
-/* ── Placeholder ───────────────────────────────────────────── */
 .pill-placeholder-cover {
-  width: 36px;
-  height: 36px;
-  border-radius: 9999px;
+  width: 36px; height: 36px; border-radius: 9999px;
   background: var(--input-bg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-tertiary);
-  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-tertiary); flex-shrink: 0;
 }
 .pill-placeholder-label {
-  font-size: 13px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  flex: 1;
+  font-size: 13px; color: var(--text-tertiary);
+  white-space: nowrap; flex: 1;
 }
-
-/* ── Song info ─────────────────────────────────────────────── */
 .pill-song {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  flex-shrink: 0;
-  max-width: 200px;
+  display: flex; align-items: center; gap: 9px;
+  flex-shrink: 0; max-width: 200px;
 }
 .pill-cover {
-  width: 36px;
-  height: 36px;
-  border-radius: 9999px;
-  object-fit: cover;
-  cursor: pointer;
-  flex-shrink: 0;
+  width: 36px; height: 36px; border-radius: 9999px;
+  object-fit: cover; cursor: pointer; flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(0,0,0,0.12);
   transition: transform 0.3s;
 }
@@ -222,207 +199,100 @@ onBeforeUnmount(() => document.removeEventListener('click', handleClickOutside))
 .pill-cover.spinning { animation: spin 8s linear infinite; }
 .pill-song-info { overflow: hidden; }
 .pill-song-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 130px;
+  font-size: 13px; font-weight: 600; color: var(--text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;
 }
 .pill-song-artist {
-  font-size: 11px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 130px;
+  font-size: 11px; color: var(--text-secondary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;
 }
 .pill-like {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--text-tertiary);
-  padding: 4px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: var(--transition);
-  flex-shrink: 0;
+  background: none; border: none; cursor: pointer;
+  color: var(--text-tertiary); padding: 4px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  transition: var(--transition); flex-shrink: 0;
 }
 .pill-like:hover { color: #e84393; background: rgba(232,67,147,0.08); }
 .pill-like.liked { color: #e84393; }
-
-/* ── Progress row ──────────────────────────────────────────── */
 .pill-progress-row {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 100px;
+  flex: 1; display: flex; align-items: center; gap: 7px; min-width: 100px;
 }
 .pill-time {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-  width: 30px;
-  text-align: center;
+  font-size: 11px; color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums; flex-shrink: 0; width: 30px; text-align: center;
 }
 .pill-progress {
-  flex: 1;
-  height: 3px;
-  background: var(--input-bg);
-  border-radius: 9999px;
-  cursor: pointer;
-  position: relative;
-  overflow: visible;
+  flex: 1; height: 3px; background: var(--input-bg);
+  border-radius: 9999px; cursor: pointer; position: relative; overflow: visible;
 }
 .pill-progress-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 9999px;
-  position: relative;
-  transition: width 0.1s linear;
+  height: 100%; background: var(--accent);
+  border-radius: 9999px; position: relative; transition: width 0.1s linear;
 }
 .pill-progress-thumb {
-  position: absolute;
-  right: -4px;
-  top: 50%;
+  position: absolute; right: -4px; top: 50%;
   transform: translateY(-50%) scale(0);
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--accent);
-  transition: transform 0.15s;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent); transition: transform 0.15s;
 }
 .pill-progress:hover .pill-progress-thumb { transform: translateY(-50%) scale(1); }
 .pill-progress-bubble {
-  position: absolute;
-  top: -22px;
-  transform: translateX(-50%);
-  background: var(--glass-bg-heavy);
-  backdrop-filter: var(--glass-blur);
-  color: var(--text-primary);
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 6px;
-  white-space: nowrap;
-  pointer-events: none;
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  position: absolute; top: -22px; transform: translateX(-50%);
+  background: var(--glass-bg-heavy); backdrop-filter: var(--glass-blur);
+  color: var(--text-primary); font-size: 11px; padding: 2px 6px;
+  border-radius: 6px; white-space: nowrap; pointer-events: none;
+  border: 1px solid var(--glass-border); box-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
-
-/* ── Controls row ──────────────────────────────────────────── */
-.pill-controls {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-}
+.pill-controls { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 .pill-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--text-secondary);
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: var(--transition);
-  padding: 0;
-  flex-shrink: 0;
+  background: none; border: none; cursor: pointer;
+  color: var(--text-secondary); width: 30px; height: 30px;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  transition: var(--transition); padding: 0; flex-shrink: 0;
 }
 .pill-btn:hover:not(:disabled) { background: var(--hover-bg); color: var(--text-primary); }
 .pill-btn:disabled { opacity: 0.28; cursor: not-allowed; }
 .pill-btn-play {
-  width: 36px;
-  height: 36px;
-  background: var(--accent);
-  color: #fff;
+  width: 36px; height: 36px;
+  background: var(--accent); color: #fff;
   box-shadow: 0 4px 14px rgba(0,113,227,0.35);
 }
 .pill-btn-play:hover:not(:disabled) {
-  background: var(--accent-light);
-  color: #fff;
-  transform: scale(1.06);
+  background: var(--accent-light); color: #fff; transform: scale(1.06);
 }
 .pill-sep {
-  width: 1px;
-  height: 18px;
-  background: var(--glass-border);
-  margin: 0 3px;
-  flex-shrink: 0;
+  width: 1px; height: 18px; background: var(--glass-border); margin: 0 3px; flex-shrink: 0;
 }
-
-/* Volume */
 .pill-volume { display: flex; align-items: center; gap: 3px; }
 .pill-volume-bar {
-  width: 60px;
-  height: 3px;
-  background: var(--input-bg);
-  border-radius: 9999px;
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
+  width: 60px; height: 3px; background: var(--input-bg);
+  border-radius: 9999px; cursor: pointer; position: relative; overflow: hidden;
 }
 .pill-volume-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 9999px;
-  pointer-events: none;
+  height: 100%; background: var(--accent); border-radius: 9999px; pointer-events: none;
 }
-
-/* Quality */
 .pill-quality { position: relative; }
 .pill-quality-btn {
-  width: auto;
-  border-radius: 9999px;
-  padding: 0 8px;
-  gap: 3px;
-  font-size: 11px;
-  font-weight: 600;
-  height: 26px;
+  width: auto; border-radius: 9999px; padding: 0 8px;
+  gap: 3px; font-size: 11px; font-weight: 600; height: 26px;
 }
 .pill-quality-menu {
-  position: absolute;
-  bottom: calc(100% + 10px);
-  right: 0;
+  position: absolute; bottom: calc(100% + 10px); right: 0;
   background: var(--glass-bg-heavy);
-  backdrop-filter: var(--glass-blur-heavy);
-  -webkit-backdrop-filter: var(--glass-blur-heavy);
-  border: 1px solid var(--glass-border);
-  border-radius: 14px;
-  overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
-  z-index: 300;
-  min-width: 84px;
+  backdrop-filter: var(--glass-blur-heavy); -webkit-backdrop-filter: var(--glass-blur-heavy);
+  border: 1px solid var(--glass-border); border-radius: 14px; overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18); z-index: 300; min-width: 84px;
   animation: menuIn 0.18s ease;
 }
 @keyframes menuIn { from { opacity:0; transform: translateY(4px); } to { opacity:1; transform: translateY(0); } }
 .pill-quality-item {
-  padding: 8px 14px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: var(--transition);
-  white-space: nowrap;
-  text-align: center;
+  padding: 8px 14px; font-size: 13px; color: var(--text-secondary);
+  cursor: pointer; transition: var(--transition); white-space: nowrap; text-align: center;
 }
 .pill-quality-item:hover { background: var(--hover-bg); color: var(--text-primary); }
 .pill-quality-item.active { color: var(--accent); font-weight: 600; }
-
-/* Mobile */
 @media (max-width: 600px) {
-  .player-pill {
-    bottom: 12px;
-    padding: 8px 12px;
-    gap: 8px;
-    border-radius: 22px;
-  }
+  .player-pill { bottom: 12px; padding: 8px 12px; gap: 8px; border-radius: 22px; }
   .pill-song { max-width: 130px; }
   .pill-song-name, .pill-song-artist { max-width: 90px; }
   .pill-volume, .pill-quality, .pill-sep { display: none; }
