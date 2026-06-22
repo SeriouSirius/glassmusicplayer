@@ -1,5 +1,6 @@
 <script setup>
 import { inject, ref, watch, nextTick, computed } from 'vue'
+import { api } from '../api/index.js'
 
 const player = inject('player')
 
@@ -31,6 +32,99 @@ const coverSrc = computed(() =>
   player.currentSong.value?.al?.picUrl ||
   player.currentSong.value?.picUrl || ''
 )
+
+// ── Song ID helper ────────────────────────────────────────────────────────────
+const currentSongId = computed(() =>
+  player.currentSong.value?.id || player.currentSong.value?.songId || null
+)
+
+// ── Song Detail ───────────────────────────────────────────────────────────────
+const showDetailModal = ref(false)
+const songDetail = ref(null)
+const detailLoading = ref(false)
+
+async function openSongDetail() {
+  if (!currentSongId.value) return
+  showDetailModal.value = true
+  detailLoading.value = true
+  try {
+    const res = await api(`/song/detail?ids=${currentSongId.value}`)
+    songDetail.value = res?.songs?.[0] ?? null
+  } catch (e) {
+    songDetail.value = null
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+// ── Like / Unlike ─────────────────────────────────────────────────────────────
+const isLiked = ref(false)
+const likeLoading = ref(false)
+const likeToast = ref('')
+let likeToastTimer = null
+
+// sync with player's liked state if available
+watch(() => player.currentSong.value?.id, () => {
+  isLiked.value = player.likedSongIds?.value?.has(currentSongId.value) ?? false
+}, { immediate: true })
+
+async function toggleLike() {
+  if (!currentSongId.value || likeLoading.value) return
+  likeLoading.value = true
+  const newLike = !isLiked.value
+  try {
+    const res = await api(`/like?id=${currentSongId.value}&like=${newLike}`, { method: 'POST' })
+    if (res?.code === 200) {
+      isLiked.value = newLike
+      showLikeToast(newLike ? '已添加到我喜欢的音乐 ❤️' : '已取消喜欢')
+      // sync back to player store if available
+      if (player.likedSongIds?.value) {
+        newLike
+          ? player.likedSongIds.value.add(currentSongId.value)
+          : player.likedSongIds.value.delete(currentSongId.value)
+      }
+    } else {
+      showLikeToast('操作失败，请先登录')
+    }
+  } catch {
+    showLikeToast('操作失败，请检查网络')
+  } finally {
+    likeLoading.value = false
+  }
+}
+
+function showLikeToast(msg) {
+  likeToast.value = msg
+  clearTimeout(likeToastTimer)
+  likeToastTimer = setTimeout(() => { likeToast.value = '' }, 2500)
+}
+
+// ── Download ──────────────────────────────────────────────────────────────────
+const downloadLoading = ref(false)
+
+async function downloadSong() {
+  if (!currentSongId.value || downloadLoading.value) return
+  downloadLoading.value = true
+  try {
+    const res = await api(`/song/url?id=${currentSongId.value}`)
+    const url = res?.data?.[0]?.url
+    if (!url) { showLikeToast('暂无下载链接'); return }
+    const songName = player.currentSong.value?.name || 'song'
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${songName}.mp3`
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    showLikeToast('开始下载 🎵')
+  } catch {
+    showLikeToast('下载失败，请检查网络')
+  } finally {
+    downloadLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -46,7 +140,7 @@ const coverSrc = computed(() =>
 
       <div class="lo-panel">
 
-        <!-- ── LEFT 30%: cover + meta (fully centered) ────────────────────── -->
+        <!-- ── LEFT 30%: cover + meta + action buttons ────────────────────── -->
         <div class="lo-left">
           <img
             class="lo-cover"
@@ -59,6 +153,52 @@ const coverSrc = computed(() =>
             <div class="lo-artist">{{ player.currentArtist.value }}</div>
             <div class="lo-album">{{ player.currentAlbum.value }}</div>
           </div>
+
+          <!-- ── Three action buttons ─────────────────────────────────────── -->
+          <div class="lo-actions">
+            <!-- Song Detail -->
+            <button class="lo-action-btn" @click="openSongDetail" title="歌曲详情">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              <span>歌曲详情</span>
+            </button>
+
+            <!-- Like / Unlike -->
+            <button
+              class="lo-action-btn"
+              :class="{ liked: isLiked, loading: likeLoading }"
+              @click="toggleLike"
+              :title="isLiked ? '取消喜欢' : '喜欢歌曲'"
+            >
+              <svg viewBox="0 0 24 24" :fill="isLiked ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" width="17" height="17">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+              </svg>
+              <span>{{ isLiked ? '已喜欢' : '喜欢歌曲' }}</span>
+            </button>
+
+            <!-- Download -->
+            <button
+              class="lo-action-btn"
+              :class="{ loading: downloadLoading }"
+              @click="downloadSong"
+              title="下载歌曲"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <span>下载歌曲</span>
+            </button>
+          </div>
+
+          <!-- Toast feedback -->
+          <Transition name="toast-fade">
+            <div v-if="likeToast" class="lo-toast">{{ likeToast }}</div>
+          </Transition>
         </div>
 
         <!-- ── RIGHT 70%: lyrics ──────────────────────────────────────────── -->
@@ -97,6 +237,39 @@ const coverSrc = computed(() =>
 
       </div>
     </div>
+
+    <!-- ── Song Detail Modal ────────────────────────────────────────────────── -->
+    <Transition name="modal-fade">
+      <div v-if="showDetailModal" class="lo-modal-backdrop" @click.self="showDetailModal = false">
+        <div class="lo-modal">
+          <div class="lo-modal-header">
+            <span class="lo-modal-title">歌曲详情</span>
+            <button class="lo-close-sm" @click="showDetailModal = false">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="lo-modal-body">
+            <div v-if="detailLoading" class="lo-modal-loading">加载中…</div>
+            <template v-else-if="songDetail">
+              <div class="lo-detail-row">
+                <img :src="songDetail.al?.picUrl" class="lo-detail-cover" referrerpolicy="no-referrer">
+                <div class="lo-detail-info">
+                  <div class="lo-detail-name">{{ songDetail.name }}</div>
+                  <div class="lo-detail-item"><span class="lo-detail-label">歌手</span>{{ songDetail.ar?.map(a => a.name).join(' / ') }}</div>
+                  <div class="lo-detail-item"><span class="lo-detail-label">专辑</span>{{ songDetail.al?.name }}</div>
+                  <div class="lo-detail-item" v-if="songDetail.publishTime"><span class="lo-detail-label">发行</span>{{ new Date(songDetail.publishTime).getFullYear() }}</div>
+                  <div class="lo-detail-item" v-if="songDetail.dt"><span class="lo-detail-label">时长</span>{{ Math.floor(songDetail.dt/60000) }}:{{ String(Math.floor((songDetail.dt%60000)/1000)).padStart(2,'0') }}</div>
+                  <div class="lo-detail-item" v-if="songDetail.pop != null"><span class="lo-detail-label">热度</span>{{ songDetail.pop }}</div>
+                </div>
+              </div>
+            </template>
+            <div v-else class="lo-modal-loading" style="color:var(--text-tertiary)">暂无详情</div>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </Teleport>
 </template>
 
@@ -188,6 +361,73 @@ const coverSrc = computed(() =>
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
+/* ── Action Buttons ──────────────────────────────────────────────────────────── */
+.lo-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 0 8px;
+}
+
+.lo-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  width: 100%;
+  justify-content: center;
+}
+.lo-action-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+.lo-action-btn:active {
+  transform: translateY(0);
+}
+.lo-action-btn.liked {
+  color: #ff4d6d;
+  border-color: rgba(255, 77, 109, 0.35);
+  background: rgba(255, 77, 109, 0.08);
+}
+.lo-action-btn.liked:hover {
+  background: rgba(255, 77, 109, 0.15);
+}
+.lo-action-btn.loading {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ── Toast ───────────────────────────────────────────────────────────────────── */
+.lo-toast {
+  position: absolute;
+  bottom: 140px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.72);
+  color: #fff;
+  font-size: 13px;
+  padding: 7px 16px;
+  border-radius: 20px;
+  white-space: nowrap;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+}
+.toast-fade-enter-active, .toast-fade-leave-active { transition: opacity 0.3s ease; }
+.toast-fade-enter-from, .toast-fade-leave-to { opacity: 0; }
+
 /* ── RIGHT 70%: lyrics scroll ────────────────────────────────────────────────── */
 .lo-right {
   flex: 1;
@@ -256,6 +496,96 @@ const coverSrc = computed(() =>
   opacity: 0.55;
 }
 
+/* ── Song Detail Modal ────────────────────────────────────────────────────────── */
+.lo-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.lo-modal {
+  background: var(--glass-bg-heavy, rgba(28,27,25,0.95));
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  width: min(480px, 90vw);
+  max-height: 80vh;
+  overflow-y: auto;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+}
+.lo-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--glass-border);
+}
+.lo-modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.lo-close-sm {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: var(--transition);
+}
+.lo-close-sm:hover { background: var(--hover-bg); color: var(--text-primary); }
+.lo-modal-body { padding: 20px; }
+.lo-modal-loading {
+  text-align: center;
+  padding: 32px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.lo-detail-row {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+.lo-detail-cover {
+  width: 100px;
+  height: 100px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex-shrink: 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+}
+.lo-detail-info { flex: 1; min-width: 0; }
+.lo-detail-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+  word-break: break-word;
+}
+.lo-detail-item {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  display: flex;
+  gap: 8px;
+}
+.lo-detail-label {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  width: 32px;
+}
+
+/* Transition for modal */
+.modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.25s ease; }
+.modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
+
 /* ── Mobile: stack vertically ────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .lo-panel { flex-direction: column; padding-bottom: 100px; }
@@ -263,11 +593,23 @@ const coverSrc = computed(() =>
     width: 100%; flex-direction: row;
     border-right: none; border-bottom: 1px solid var(--glass-border);
     padding: 16px 20px; gap: 16px;
-    justify-content: center; align-items: center;
+    justify-content: flex-start; align-items: center;
     flex-shrink: 0;
+    flex-wrap: wrap;
   }
   .lo-cover { width: 64px; height: 64px; }
   .lo-meta { text-align: left; flex: 1; min-width: 0; }
+  .lo-actions {
+    flex-direction: row;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .lo-action-btn {
+    flex: 1;
+    min-width: 80px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
   .lyric-line { font-size: 20px; }
   .lyric-line.active { font-size: 23px; }
   .lo-lyrics-inner { padding: 30vw 20px 20px; }
