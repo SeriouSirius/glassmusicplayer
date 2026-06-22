@@ -113,25 +113,44 @@ async function toggleLike() {
   }
 }
 
-// ── Download — uses getSongDownloadUrl (same qualityUrl logic as startPlay) ──
+// ── Download — fetch blob to force browser download instead of opening URL ──
 const downloadLoading = ref(false)
 
 async function downloadSong() {
   if (!currentSongId.value || downloadLoading.value) return
   downloadLoading.value = true
+  showFeedback('准备下载…')
   try {
     const url = await player.getSongDownloadUrl(currentSongId.value)
     if (!url) { showFeedback('暂无下载链接'); return }
+
     const songName = player.currentSong.value?.name || 'song'
+
+    // Detect file extension from URL (mp3 / flac / m4a) or default to mp3
+    const extMatch = url.split('?')[0].match(/\.(flac|m4a|ogg|aac|mp3)$/i)
+    const ext = extMatch ? extMatch[1].toLowerCase() : 'mp3'
+    const filename = `${songName}.${ext}`
+
+    // Use fetch → blob → objectURL so the browser always triggers Save As
+    // instead of navigating to the audio stream page.
+    const response = await fetch(url)
+    if (!response.ok) throw new Error('fetch failed')
+    const blob = await response.blob()
+    const blobUrl = URL.createObjectURL(blob)
+
     const a = document.createElement('a')
-    a.href = url
-    a.download = `${songName}.mp3`
-    a.target = '_blank'
-    a.rel = 'noopener noreferrer'
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    a.href = blobUrl
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+
+    // Release the object URL after a short delay
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000)
+
     showFeedback('开始下载 🎵')
   } catch {
-    showFeedback('下载失败')
+    showFeedback('下载失败，请重试')
   } finally {
     downloadLoading.value = false
   }
