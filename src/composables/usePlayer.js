@@ -27,6 +27,7 @@ const volume = ref(parseFloat(localStorage.getItem('volume') || '0.8'))
 const showLyrics = ref(false)
 const lyrics = ref('')
 const parsedLyrics = ref([])
+const translatedLyrics = ref([]) // parsed tlyric: [{ time, text }]
 const isWordLevel = ref(false)
 const lyricIndex = ref(-1)
 const progressHoverX = ref(-1)
@@ -102,6 +103,7 @@ async function startPlay() {
   // Reset cover & lyrics immediately on new song
   lyricsCoverUrl.value = ''
   parsedLyrics.value = []
+  translatedLyrics.value = []
   isWordLevel.value = false
   lyricIndex.value = -1
 
@@ -252,8 +254,18 @@ function parseLrcStr(lrc) {
   return result
 }
 
+// Build a Map<time_rounded, translationText> from parsed tlyric for fast lookup
+function buildTranslationMap(tlyricArr) {
+  const map = new Map()
+  for (const item of tlyricArr) {
+    // round to 2 decimal places to match parsedLyrics time keys
+    map.set(Math.round(item.time * 100) / 100, item.text)
+  }
+  return map
+}
+
 async function loadLyrics(id) {
-  parsedLyrics.value = []; isWordLevel.value = false; lyrics.value = ''
+  parsedLyrics.value = []; translatedLyrics.value = []; isWordLevel.value = false; lyrics.value = ''
   try {
     const rNew = await api('/lyric/new?id=' + id).catch(() => null)
     if (rNew?.yrc?.lyric) {
@@ -262,6 +274,9 @@ async function loadLyrics(id) {
         parsedLyrics.value = parsed
         isWordLevel.value = true
         lyrics.value = rNew.yrc.lyric
+        // Try tlyric from /lyric/new first, then fallback
+        const tlyricSrc = rNew.tlyric?.lyric || rNew.ytlrc?.lyric || null
+        if (tlyricSrc) translatedLyrics.value = parseLrcStr(tlyricSrc)
         return
       }
     }
@@ -269,8 +284,9 @@ async function loadLyrics(id) {
     if (r?.lrc?.lyric) {
       lyrics.value = r.lrc.lyric
       parsedLyrics.value = parseLrcStr(r.lrc.lyric)
+      if (r.tlyric?.lyric) translatedLyrics.value = parseLrcStr(r.tlyric.lyric)
     }
-  } catch (e) { parsedLyrics.value = [] }
+  } catch (e) { parsedLyrics.value = []; translatedLyrics.value = [] }
 }
 
 function parseLyrics(lrc) { parsedLyrics.value = parseLrcStr(lrc) }
@@ -331,7 +347,7 @@ export function usePlayer() {
     currentSong, isPlaying, playList, playIndex, playMode,
     audioQuality, qualityOptions, qualityLabel,
     currentTime, duration, volume,
-    showLyrics, lyrics, parsedLyrics, isWordLevel, lyricIndex,
+    showLyrics, lyrics, parsedLyrics, translatedLyrics, isWordLevel, lyricIndex,
     progressHoverX, progressHoverTime, toastMsg,
     recentSongs, lyricsCoverUrl,
     currentArtist, currentAlbum, progressPercent, playModeText,
