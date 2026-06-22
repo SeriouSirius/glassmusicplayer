@@ -109,7 +109,7 @@ async function startPlay() {
   try {
     const qualityUrl = isLoggedIn.value
       ? `/song/url/v1?id=${song.id}&level=${audioQuality.value}&randomCNIP=true`
-      : `/song/url/v1?id=${song.id}&level=${audioQuality.value}&unlock=true&randomCNIP=true`
+      : `/song/url/v1?id=${song.id}&level=${audioQuality.value}&unblock=true&randomCNIP=true`
     const r = await api(qualityUrl)
     if (r?.data?.[0]?.url) {
       played = await tryAudioSrc(r.data[0].url)
