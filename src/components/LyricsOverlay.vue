@@ -33,29 +33,18 @@ const coverSrc = computed(() =>
   player.currentSong.value?.picUrl || ''
 )
 
-// ── Song ID helper ────────────────────────────────────────────────────────────
+// ── Song ID helper ───────────────────────────────────────────────────────────
 const currentSongId = computed(() =>
   player.currentSong.value?.id || player.currentSong.value?.songId || null
 )
 
-// ── Translation map: time → text ───────────────────────────────────────────────
+// ── Translation map ──────────────────────────────────────────────────────────
 const showTranslation = ref(false)
 
-// Build a map of time -> translation for fast lookup when rendering lyrics
-const translationMap = computed(() => {
-  const map = new Map()
-  for (const item of (player.translatedLyrics?.value ?? [])) {
-    map.set(Math.round(item.time * 100) / 100, item.text)
-  }
-  return map
-})
-
-// For each parsed lyric line, find the best-matching translation by closest time
 const translationByIndex = computed(() => {
   const tArr = player.translatedLyrics?.value ?? []
   if (!tArr.length) return []
   return player.parsedLyrics.value.map(line => {
-    // Find the translation entry with the smallest time diff ≤ 1s
     let best = null, bestDiff = Infinity
     for (const t of tArr) {
       const diff = Math.abs(t.time - line.time)
@@ -97,7 +86,7 @@ const likeLoading = ref(false)
 
 watch(() => player.currentSong.value?.id, () => {
   isLiked.value = player.likedSongIds?.value?.has(currentSongId.value) ?? false
-  showTranslation.value = false // reset on song change
+  showTranslation.value = false
 }, { immediate: true })
 
 async function toggleLike() {
@@ -124,20 +113,21 @@ async function toggleLike() {
   }
 }
 
-// ── Download ─────────────────────────────────────────────────────────────────
+// ── Download — uses getSongDownloadUrl (same qualityUrl logic as startPlay) ──
 const downloadLoading = ref(false)
 
 async function downloadSong() {
   if (!currentSongId.value || downloadLoading.value) return
   downloadLoading.value = true
   try {
-    const res = await api(`/song/url?id=${currentSongId.value}`)
-    const url = res?.data?.[0]?.url
+    const url = await player.getSongDownloadUrl(currentSongId.value)
     if (!url) { showFeedback('暂无下载链接'); return }
     const songName = player.currentSong.value?.name || 'song'
     const a = document.createElement('a')
-    a.href = url; a.download = `${songName}.mp3`
-    a.target = '_blank'; a.rel = 'noopener noreferrer'
+    a.href = url
+    a.download = `${songName}.mp3`
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
     showFeedback('开始下载 🎵')
   } catch {
@@ -147,7 +137,7 @@ async function downloadSong() {
   }
 }
 
-// ── Shared feedback toast ─────────────────────────────────────────────────────
+// ── Shared feedback toast ────────────────────────────────────────────────────
 const feedbackMsg = ref('')
 let feedbackTimer = null
 function showFeedback(msg) {
@@ -170,7 +160,7 @@ function showFeedback(msg) {
 
       <div class="lo-panel">
 
-        <!-- ── LEFT 30%: cover + meta + action buttons ────────────────────── -->
+        <!-- ── LEFT 30%: cover + meta + action buttons ──────────────────────── -->
         <div class="lo-left">
           <img
             class="lo-cover"
@@ -184,7 +174,7 @@ function showFeedback(msg) {
             <div class="lo-album">{{ player.currentAlbum.value }}</div>
           </div>
 
-          <!-- ── Four round icon buttons (horizontal) ─────────────────────── -->
+          <!-- ── Four round icon buttons (horizontal) ──────────────────────── -->
           <div class="lo-actions">
 
             <!-- Song Detail -->
@@ -222,7 +212,6 @@ function showFeedback(msg) {
                 @click="toggleTranslation"
                 aria-label="歌词翻译"
               >
-                <!-- "T" translation icon -->
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
                   <path d="M3 5h8M7 3v2M11 19l4-9 4 9M12.5 15.5h5"/>
                   <path d="M5 7c0 4 3 6 5 7"/>
@@ -304,7 +293,7 @@ function showFeedback(msg) {
       </div>
     </div>
 
-    <!-- ── Song Detail Modal ────────────────────────────────────────────────── -->
+    <!-- ── Song Detail Modal ─────────────────────────────────────────────────── -->
     <Transition name="modal-fade">
       <div v-if="showDetailModal" class="lo-modal-backdrop" @click.self="showDetailModal = false">
         <div class="lo-modal">
@@ -340,7 +329,7 @@ function showFeedback(msg) {
 </template>
 
 <style scoped>
-/* ── Fullscreen root ─────────────────────────────────────────────────────────── */
+/* ── Fullscreen root ───────────────────────────────────────────────────────── */
 .lo-root {
   position: fixed;
   inset: 0;
@@ -354,7 +343,7 @@ function showFeedback(msg) {
 }
 @keyframes loFadeIn { from { opacity:0 } to { opacity:1 } }
 
-/* ── Close button ────────────────────────────────────────────────────────────── */
+/* ── Close button ──────────────────────────────────────────────────────────── */
 .lo-close {
   position: absolute;
   top: 20px; right: 24px;
@@ -371,7 +360,7 @@ function showFeedback(msg) {
 }
 .lo-close:hover { background: var(--hover-bg); color: var(--text-primary); }
 
-/* ── Panel layout ─────────────────────────────────────────────────────────────── */
+/* ── Panel layout ──────────────────────────────────────────────────────────── */
 .lo-panel {
   display: flex;
   flex: 1;
@@ -379,7 +368,7 @@ function showFeedback(msg) {
   overflow: hidden;
 }
 
-/* ── LEFT 30% ─────────────────────────────────────────────────────────────────── */
+/* ── LEFT 30% ──────────────────────────────────────────────────────────────── */
 .lo-left {
   width: 30%;
   flex-shrink: 0;
@@ -390,7 +379,7 @@ function showFeedback(msg) {
   gap: 20px;
   padding: 40px 24px;
   border-right: 1px solid var(--glass-border);
-  position: relative; /* needed for toast positioning */
+  position: relative;
 }
 
 .lo-cover {
@@ -427,7 +416,7 @@ function showFeedback(msg) {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-/* ── Round icon buttons row ──────────────────────────────────────────────── */
+/* ── Round icon buttons row ────────────────────────────────────────────────── */
 .lo-actions {
   display: flex;
   flex-direction: row;
@@ -436,7 +425,6 @@ function showFeedback(msg) {
   flex-wrap: wrap;
 }
 
-/* Each button wrapped in a relative container for tooltip positioning */
 .lo-btn-wrap {
   position: relative;
   display: inline-flex;
@@ -467,7 +455,6 @@ function showFeedback(msg) {
 }
 .lo-icon-btn:active { transform: scale(0.95); }
 
-/* Liked state */
 .lo-icon-btn.liked {
   color: #ff4d6d;
   border-color: rgba(255, 77, 109, 0.4);
@@ -475,7 +462,6 @@ function showFeedback(msg) {
 }
 .lo-icon-btn.liked:hover { background: rgba(255, 77, 109, 0.18); }
 
-/* Translation active state */
 .lo-icon-btn.active {
   color: var(--accent);
   border-color: var(--accent);
@@ -483,20 +469,18 @@ function showFeedback(msg) {
 }
 .lo-icon-btn.active:hover { opacity: 0.85; }
 
-/* Disabled (no translation available) */
 .lo-icon-btn.disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
 
-/* Loading state */
 .lo-icon-btn.btn-loading {
   opacity: 0.5;
   cursor: not-allowed;
   pointer-events: none;
 }
 
-/* Tooltip label — appears below button on hover */
+/* Tooltip label */
 .lo-btn-tip {
   position: absolute;
   top: calc(100% + 6px);
@@ -517,7 +501,7 @@ function showFeedback(msg) {
 }
 .lo-btn-wrap:hover .lo-btn-tip { opacity: 1; }
 
-/* ── Toast ───────────────────────────────────────────────────────────────────── */
+/* ── Toast ───────────────────────────────────────────────────────────────────  */
 .lo-toast {
   position: absolute;
   bottom: 32px;
@@ -536,7 +520,7 @@ function showFeedback(msg) {
 .toast-fade-enter-active, .toast-fade-leave-active { transition: opacity 0.3s ease; }
 .toast-fade-enter-from, .toast-fade-leave-to { opacity: 0; }
 
-/* ── RIGHT 70%: lyrics scroll ──────────────────────────────────────────────── */
+/* ── RIGHT 70%: lyrics scroll ────────────────────────────────────────────────  */
 .lo-right {
   flex: 1;
   display: flex;
@@ -560,7 +544,7 @@ function showFeedback(msg) {
   gap: 2px;
 }
 
-/* ── Lyric line ──────────────────────────────────────────────────────────────────── */
+/* ── Lyric line ──────────────────────────────────────────────────────────────  */
 .lyric-line {
   font-size: 28px;
   font-weight: 700;
@@ -590,7 +574,7 @@ function showFeedback(msg) {
   transform: scale(1);
 }
 
-/* ── Translation line ──────────────────────────────────────────────────────────── */
+/* ── Translation line ────────────────────────────────────────────────────────  */
 .lyric-translation {
   font-size: 15px;
   font-weight: 400;
@@ -599,7 +583,6 @@ function showFeedback(msg) {
   line-height: 1.4;
   transition: opacity 0.3s ease;
 }
-/* Active line translation is more visible */
 .lyric-line.active .lyric-translation {
   font-size: 17px;
   color: var(--text-secondary);
@@ -607,7 +590,7 @@ function showFeedback(msg) {
 .tl-fade-enter-active, .tl-fade-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
 .tl-fade-enter-from, .tl-fade-leave-to { opacity: 0; transform: translateY(-4px); }
 
-/* ── Word-level ──────────────────────────────────────────────────────────────── */
+/* ── Word-level ──────────────────────────────────────────────────────────────  */
 .lyric-word {
   display: inline;
   transition: color 0.18s ease, text-shadow 0.18s ease;
@@ -621,7 +604,7 @@ function showFeedback(msg) {
   opacity: 0.55;
 }
 
-/* ── Song Detail Modal ────────────────────────────────────────────────────────── */
+/* ── Song Detail Modal ───────────────────────────────────────────────────────  */
 .lo-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -709,7 +692,7 @@ function showFeedback(msg) {
 .modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.25s ease; }
 .modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
 
-/* ── Mobile: stack vertically ────────────────────────────────────────────────── */
+/* ── Mobile ─────────────────────────────────────────────────────────────────  */
 @media (max-width: 640px) {
   .lo-panel { flex-direction: column; padding-bottom: 100px; }
   .lo-left {

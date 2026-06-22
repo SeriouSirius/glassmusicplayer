@@ -71,14 +71,31 @@ function normalizeSong(s) {
 function showToast(m) { toastMsg.value = m; setTimeout(() => toastMsg.value = '', 2500) }
 
 // Fetch a high-res (512px) cover for the lyrics overlay.
-// Resets lyricsCoverUrl before fetching so the overlay shows the
-// regular thumbnail immediately, then upgrades once resolved.
 async function fetchLargecover(song) {
-  lyricsCoverUrl.value = '' // reset first so overlay uses thumbnail during load
+  lyricsCoverUrl.value = ''
   const picUrl = song.al?.picUrl || song.album?.picUrl || song.picUrl
   if (!picUrl) return
   const base = picUrl.split('?')[0]
   lyricsCoverUrl.value = base + '?param=512y512'
+}
+
+// ── Get the best-quality download URL for a song (mirrors startPlay qualityUrl logic) ──
+async function getSongDownloadUrl(songId) {
+  const qualityUrl = isLoggedIn.value
+    ? `/song/url/v1?id=${songId}&level=${audioQuality.value}&randomCNIP=true`
+    : `/song/url/v1?id=${songId}&level=${audioQuality.value}&unblock=true&randomCNIP=true`
+  try {
+    const r = await api(qualityUrl)
+    const url = r?.data?.[0]?.url
+    if (url) return url
+  } catch (e) {}
+  // Fallback to match API
+  try {
+    const r = await api('/song/url/match?id=' + songId + '&randomCNIP=true')
+    const matchUrl = typeof r?.data === 'string' ? r.data : r?.data?.[0]?.url
+    if (matchUrl) return matchUrl
+  } catch (e) {}
+  return null
 }
 
 async function playSong(song, isFm = false) {
@@ -117,7 +134,6 @@ async function startPlay() {
       played = await tryAudioSrc(r.data[0].url)
       if (played) {
         _startPlayRunning = false; _consecutiveSkips = 0
-        // Fire both in parallel — no need to await
         loadLyrics(song.id)
         fetchLargecover(song)
         addToRecent(song)
@@ -254,16 +270,6 @@ function parseLrcStr(lrc) {
   return result
 }
 
-// Build a Map<time_rounded, translationText> from parsed tlyric for fast lookup
-function buildTranslationMap(tlyricArr) {
-  const map = new Map()
-  for (const item of tlyricArr) {
-    // round to 2 decimal places to match parsedLyrics time keys
-    map.set(Math.round(item.time * 100) / 100, item.text)
-  }
-  return map
-}
-
 async function loadLyrics(id) {
   parsedLyrics.value = []; translatedLyrics.value = []; isWordLevel.value = false; lyrics.value = ''
   try {
@@ -274,7 +280,6 @@ async function loadLyrics(id) {
         parsedLyrics.value = parsed
         isWordLevel.value = true
         lyrics.value = rNew.yrc.lyric
-        // Try tlyric from /lyric/new first, then fallback
         const tlyricSrc = rNew.tlyric?.lyric || rNew.ytlrc?.lyric || null
         if (tlyricSrc) translatedLyrics.value = parseLrcStr(tlyricSrc)
         return
@@ -356,6 +361,7 @@ export function usePlayer() {
     prevSong, nextSong, manualNextSong,
     playPlaylist, playSongsList,
     loadLyrics, parseLyrics,
+    getSongDownloadUrl,
     onTimeUpdate, onEnded, onLoaded, onError,
     seekTo, onProgressHover, setVolume, toggleMute, setAudioQuality,
     addToRecent
