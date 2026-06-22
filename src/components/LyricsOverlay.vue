@@ -6,7 +6,7 @@ const player = inject('player')
 
 const lyricsContainer = ref(null)
 
-// ── Auto-scroll ───────────────────────────────────────────────────────────────
+// ── Auto-scroll ──────────────────────────────────────────────────────────────
 watch(() => player.lyricIndex.value, () => {
   nextTick(() => {
     const el = lyricsContainer.value?.querySelector('.lyric-line.active')
@@ -14,7 +14,7 @@ watch(() => player.lyricIndex.value, () => {
   })
 })
 
-// ── Word-level: which word in active line is lit ──────────────────────────────
+// ── Word-level: which word in active line is lit ─────────────────────────────
 const activeWordIndex = computed(() => {
   const line = player.parsedLyrics.value[player.lyricIndex.value]
   if (!line?.words) return -1
@@ -38,7 +38,41 @@ const currentSongId = computed(() =>
   player.currentSong.value?.id || player.currentSong.value?.songId || null
 )
 
-// ── Song Detail ───────────────────────────────────────────────────────────────
+// ── Translation map: time → text ───────────────────────────────────────────────
+const showTranslation = ref(false)
+
+// Build a map of time -> translation for fast lookup when rendering lyrics
+const translationMap = computed(() => {
+  const map = new Map()
+  for (const item of (player.translatedLyrics?.value ?? [])) {
+    map.set(Math.round(item.time * 100) / 100, item.text)
+  }
+  return map
+})
+
+// For each parsed lyric line, find the best-matching translation by closest time
+const translationByIndex = computed(() => {
+  const tArr = player.translatedLyrics?.value ?? []
+  if (!tArr.length) return []
+  return player.parsedLyrics.value.map(line => {
+    // Find the translation entry with the smallest time diff ≤ 1s
+    let best = null, bestDiff = Infinity
+    for (const t of tArr) {
+      const diff = Math.abs(t.time - line.time)
+      if (diff < bestDiff && diff <= 1.0) { best = t.text; bestDiff = diff }
+    }
+    return best
+  })
+})
+
+const hasTranslation = computed(() => (player.translatedLyrics?.value?.length ?? 0) > 0)
+
+function toggleTranslation() {
+  if (!hasTranslation.value) { showFeedback('暂无翻译歌词'); return }
+  showTranslation.value = !showTranslation.value
+}
+
+// ── Song Detail ──────────────────────────────────────────────────────────────
 const showDetailModal = ref(false)
 const songDetail = ref(null)
 const detailLoading = ref(false)
@@ -57,15 +91,13 @@ async function openSongDetail() {
   }
 }
 
-// ── Like / Unlike ─────────────────────────────────────────────────────────────
+// ── Like / Unlike ────────────────────────────────────────────────────────────
 const isLiked = ref(false)
 const likeLoading = ref(false)
-const likeToast = ref('')
-let likeToastTimer = null
 
-// sync with player's liked state if available
 watch(() => player.currentSong.value?.id, () => {
   isLiked.value = player.likedSongIds?.value?.has(currentSongId.value) ?? false
+  showTranslation.value = false // reset on song change
 }, { immediate: true })
 
 async function toggleLike() {
@@ -76,30 +108,23 @@ async function toggleLike() {
     const res = await api(`/like?id=${currentSongId.value}&like=${newLike}`, { method: 'POST' })
     if (res?.code === 200) {
       isLiked.value = newLike
-      showLikeToast(newLike ? '已添加到我喜欢的音乐 ❤️' : '已取消喜欢')
-      // sync back to player store if available
+      showFeedback(newLike ? '已添加到喜欢 ❤️' : '已取消喜欢')
       if (player.likedSongIds?.value) {
         newLike
           ? player.likedSongIds.value.add(currentSongId.value)
           : player.likedSongIds.value.delete(currentSongId.value)
       }
     } else {
-      showLikeToast('操作失败，请先登录')
+      showFeedback('请先登录')
     }
   } catch {
-    showLikeToast('操作失败，请检查网络')
+    showFeedback('操作失败')
   } finally {
     likeLoading.value = false
   }
 }
 
-function showLikeToast(msg) {
-  likeToast.value = msg
-  clearTimeout(likeToastTimer)
-  likeToastTimer = setTimeout(() => { likeToast.value = '' }, 2500)
-}
-
-// ── Download ──────────────────────────────────────────────────────────────────
+// ── Download ─────────────────────────────────────────────────────────────────
 const downloadLoading = ref(false)
 
 async function downloadSong() {
@@ -108,22 +133,27 @@ async function downloadSong() {
   try {
     const res = await api(`/song/url?id=${currentSongId.value}`)
     const url = res?.data?.[0]?.url
-    if (!url) { showLikeToast('暂无下载链接'); return }
+    if (!url) { showFeedback('暂无下载链接'); return }
     const songName = player.currentSong.value?.name || 'song'
     const a = document.createElement('a')
-    a.href = url
-    a.download = `${songName}.mp3`
-    a.target = '_blank'
-    a.rel = 'noopener noreferrer'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    showLikeToast('开始下载 🎵')
+    a.href = url; a.download = `${songName}.mp3`
+    a.target = '_blank'; a.rel = 'noopener noreferrer'
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    showFeedback('开始下载 🎵')
   } catch {
-    showLikeToast('下载失败，请检查网络')
+    showFeedback('下载失败')
   } finally {
     downloadLoading.value = false
   }
+}
+
+// ── Shared feedback toast ─────────────────────────────────────────────────────
+const feedbackMsg = ref('')
+let feedbackTimer = null
+function showFeedback(msg) {
+  feedbackMsg.value = msg
+  clearTimeout(feedbackTimer)
+  feedbackTimer = setTimeout(() => { feedbackMsg.value = '' }, 2400)
 }
 </script>
 
@@ -154,50 +184,76 @@ async function downloadSong() {
             <div class="lo-album">{{ player.currentAlbum.value }}</div>
           </div>
 
-          <!-- ── Three action buttons ─────────────────────────────────────── -->
+          <!-- ── Four round icon buttons (horizontal) ─────────────────────── -->
           <div class="lo-actions">
+
             <!-- Song Detail -->
-            <button class="lo-action-btn" @click="openSongDetail" title="歌曲详情">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="8" x2="12" y2="12"/>
-                <line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
-              <span>歌曲详情</span>
-            </button>
+            <div class="lo-btn-wrap">
+              <button class="lo-icon-btn" @click="openSongDetail" aria-label="歌曲详情">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+              </button>
+              <span class="lo-btn-tip">歌曲详情</span>
+            </div>
 
             <!-- Like / Unlike -->
-            <button
-              class="lo-action-btn"
-              :class="{ liked: isLiked, loading: likeLoading }"
-              @click="toggleLike"
-              :title="isLiked ? '取消喜欢' : '喜欢歌曲'"
-            >
-              <svg viewBox="0 0 24 24" :fill="isLiked ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" width="17" height="17">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-              </svg>
-              <span>{{ isLiked ? '已喜欢' : '喜欢歌曲' }}</span>
-            </button>
+            <div class="lo-btn-wrap">
+              <button
+                class="lo-icon-btn"
+                :class="{ liked: isLiked, 'btn-loading': likeLoading }"
+                @click="toggleLike"
+                :aria-label="isLiked ? '取消喜欢' : '喜欢歌曲'"
+              >
+                <svg viewBox="0 0 24 24" :fill="isLiked ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" width="18" height="18">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+              </button>
+              <span class="lo-btn-tip">{{ isLiked ? '已喜欢' : '喜欢歌曲' }}</span>
+            </div>
+
+            <!-- Translation toggle -->
+            <div class="lo-btn-wrap">
+              <button
+                class="lo-icon-btn"
+                :class="{ active: showTranslation, disabled: !hasTranslation }"
+                @click="toggleTranslation"
+                aria-label="歌词翻译"
+              >
+                <!-- "T" translation icon -->
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                  <path d="M3 5h8M7 3v2M11 19l4-9 4 9M12.5 15.5h5"/>
+                  <path d="M5 7c0 4 3 6 5 7"/>
+                  <path d="M9 7c0 4-2 5.5-4 7"/>
+                </svg>
+              </button>
+              <span class="lo-btn-tip">歌词翻译</span>
+            </div>
 
             <!-- Download -->
-            <button
-              class="lo-action-btn"
-              :class="{ loading: downloadLoading }"
-              @click="downloadSong"
-              title="下载歌曲"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-              <span>下载歌曲</span>
-            </button>
+            <div class="lo-btn-wrap">
+              <button
+                class="lo-icon-btn"
+                :class="{ 'btn-loading': downloadLoading }"
+                @click="downloadSong"
+                aria-label="下载歌曲"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+              </button>
+              <span class="lo-btn-tip">下载歌曲</span>
+            </div>
+
           </div>
 
-          <!-- Toast feedback -->
+          <!-- Feedback toast -->
           <Transition name="toast-fade">
-            <div v-if="likeToast" class="lo-toast">{{ likeToast }}</div>
+            <div v-if="feedbackMsg" class="lo-toast">{{ feedbackMsg }}</div>
           </Transition>
         </div>
 
@@ -216,18 +272,28 @@ async function downloadSong() {
                   }"
                   @click="() => { const a = document.querySelector('audio'); if(a && line.time != null) a.currentTime = line.time }"
                 >
-                  <template v-if="line.words && player.isWordLevel.value">
-                    <span
-                      v-for="(w, wi) in line.words"
-                      :key="wi"
-                      class="lyric-word"
-                      :class="{
-                        'word-active': i === player.lyricIndex.value && wi <= activeWordIndex,
-                        'word-next':   i === player.lyricIndex.value && wi > activeWordIndex
-                      }"
-                    >{{ w.text }}</span>
-                  </template>
-                  <template v-else>{{ line.text }}</template>
+                  <!-- Main lyric text -->
+                  <div class="lyric-main">
+                    <template v-if="line.words && player.isWordLevel.value">
+                      <span
+                        v-for="(w, wi) in line.words"
+                        :key="wi"
+                        class="lyric-word"
+                        :class="{
+                          'word-active': i === player.lyricIndex.value && wi <= activeWordIndex,
+                          'word-next':   i === player.lyricIndex.value && wi > activeWordIndex
+                        }"
+                      >{{ w.text }}</span>
+                    </template>
+                    <template v-else>{{ line.text }}</template>
+                  </div>
+                  <!-- Translation line (shown when enabled and exists) -->
+                  <Transition name="tl-fade">
+                    <div
+                      v-if="showTranslation && translationByIndex[i]"
+                      class="lyric-translation"
+                    >{{ translationByIndex[i] }}</div>
+                  </Transition>
                 </div>
               </template>
               <div v-else class="lyric-line" style="opacity:0.35;text-align:center">暂无歌词</div>
@@ -278,7 +344,7 @@ async function downloadSong() {
 .lo-root {
   position: fixed;
   inset: 0;
-  z-index: 500;          /* below player-pill (z-index 200 on pill → pill sits above) */
+  z-index: 500;
   background: var(--glass-bg-heavy);
   backdrop-filter: var(--glass-blur-heavy);
   -webkit-backdrop-filter: var(--glass-blur-heavy);
@@ -305,16 +371,15 @@ async function downloadSong() {
 }
 .lo-close:hover { background: var(--hover-bg); color: var(--text-primary); }
 
-/* ── Two-column panel: fills screen, leaves room for player-pill at bottom ─── */
+/* ── Panel layout ─────────────────────────────────────────────────────────────── */
 .lo-panel {
   display: flex;
   flex: 1;
-  /* leave ~120px at bottom so the floating pill isn't covered */
   padding-bottom: 120px;
   overflow: hidden;
 }
 
-/* ── LEFT 30%: fully centered ────────────────────────────────────────────────── */
+/* ── LEFT 30% ─────────────────────────────────────────────────────────────────── */
 .lo-left {
   width: 30%;
   flex-shrink: 0;
@@ -325,6 +390,7 @@ async function downloadSong() {
   gap: 20px;
   padding: 40px 24px;
   border-right: 1px solid var(--glass-border);
+  position: relative; /* needed for toast positioning */
 }
 
 .lo-cover {
@@ -361,59 +427,100 @@ async function downloadSong() {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-/* ── Action Buttons ──────────────────────────────────────────────────────────── */
+/* ── Round icon buttons row ──────────────────────────────────────────────── */
 .lo-actions {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-  padding: 0 8px;
+  flex-direction: row;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
-.lo-action-btn {
-  display: flex;
+/* Each button wrapped in a relative container for tooltip positioning */
+.lo-btn-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 9px 16px;
-  border-radius: 12px;
+}
+
+.lo-icon-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease, border-color 0.2s ease;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  width: 100%;
-  justify-content: center;
+  flex-shrink: 0;
 }
-.lo-action-btn:hover {
+.lo-icon-btn:hover {
   background: var(--hover-bg);
   color: var(--text-primary);
-  transform: translateY(-1px);
+  transform: scale(1.1);
 }
-.lo-action-btn:active {
-  transform: translateY(0);
-}
-.lo-action-btn.liked {
+.lo-icon-btn:active { transform: scale(0.95); }
+
+/* Liked state */
+.lo-icon-btn.liked {
   color: #ff4d6d;
-  border-color: rgba(255, 77, 109, 0.35);
-  background: rgba(255, 77, 109, 0.08);
+  border-color: rgba(255, 77, 109, 0.4);
+  background: rgba(255, 77, 109, 0.1);
 }
-.lo-action-btn.liked:hover {
-  background: rgba(255, 77, 109, 0.15);
+.lo-icon-btn.liked:hover { background: rgba(255, 77, 109, 0.18); }
+
+/* Translation active state */
+.lo-icon-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb, 99, 102, 241), 0.1);
 }
-.lo-action-btn.loading {
-  opacity: 0.6;
+.lo-icon-btn.active:hover { opacity: 0.85; }
+
+/* Disabled (no translation available) */
+.lo-icon-btn.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Loading state */
+.lo-icon-btn.btn-loading {
+  opacity: 0.5;
   cursor: not-allowed;
   pointer-events: none;
 }
 
+/* Tooltip label — appears below button on hover */
+.lo-btn-tip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--glass-bg-heavy, rgba(20,20,20,0.9));
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  z-index: 10;
+  backdrop-filter: blur(8px);
+}
+.lo-btn-wrap:hover .lo-btn-tip { opacity: 1; }
+
 /* ── Toast ───────────────────────────────────────────────────────────────────── */
 .lo-toast {
   position: absolute;
-  bottom: 140px;
+  bottom: 32px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(0,0,0,0.72);
@@ -424,11 +531,12 @@ async function downloadSong() {
   white-space: nowrap;
   pointer-events: none;
   backdrop-filter: blur(8px);
+  z-index: 20;
 }
 .toast-fade-enter-active, .toast-fade-leave-active { transition: opacity 0.3s ease; }
 .toast-fade-enter-from, .toast-fade-leave-to { opacity: 0; }
 
-/* ── RIGHT 70%: lyrics scroll ────────────────────────────────────────────────── */
+/* ── RIGHT 70%: lyrics scroll ──────────────────────────────────────────────── */
 .lo-right {
   flex: 1;
   display: flex;
@@ -452,7 +560,7 @@ async function downloadSong() {
   gap: 2px;
 }
 
-/* ── Apple Music spring lyrics ───────────────────────────────────────────────── */
+/* ── Lyric line ──────────────────────────────────────────────────────────────────── */
 .lyric-line {
   font-size: 28px;
   font-weight: 700;
@@ -481,6 +589,23 @@ async function downloadSong() {
   filter: blur(0);
   transform: scale(1);
 }
+
+/* ── Translation line ──────────────────────────────────────────────────────────── */
+.lyric-translation {
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+  line-height: 1.4;
+  transition: opacity 0.3s ease;
+}
+/* Active line translation is more visible */
+.lyric-line.active .lyric-translation {
+  font-size: 17px;
+  color: var(--text-secondary);
+}
+.tl-fade-enter-active, .tl-fade-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
+.tl-fade-enter-from, .tl-fade-leave-to { opacity: 0; transform: translateY(-4px); }
 
 /* ── Word-level ──────────────────────────────────────────────────────────────── */
 .lyric-word {
@@ -581,8 +706,6 @@ async function downloadSong() {
   flex-shrink: 0;
   width: 32px;
 }
-
-/* Transition for modal */
 .modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.25s ease; }
 .modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
 
@@ -592,26 +715,19 @@ async function downloadSong() {
   .lo-left {
     width: 100%; flex-direction: row;
     border-right: none; border-bottom: 1px solid var(--glass-border);
-    padding: 16px 20px; gap: 16px;
+    padding: 14px 16px; gap: 14px;
     justify-content: flex-start; align-items: center;
     flex-shrink: 0;
     flex-wrap: wrap;
   }
-  .lo-cover { width: 64px; height: 64px; }
+  .lo-cover { width: 56px; height: 56px; }
   .lo-meta { text-align: left; flex: 1; min-width: 0; }
-  .lo-actions {
-    flex-direction: row;
-    width: 100%;
-    flex-wrap: wrap;
-  }
-  .lo-action-btn {
-    flex: 1;
-    min-width: 80px;
-    padding: 8px 10px;
-    font-size: 12px;
-  }
+  .lo-actions { width: 100%; gap: 10px; }
+  .lo-icon-btn { width: 36px; height: 36px; }
   .lyric-line { font-size: 20px; }
   .lyric-line.active { font-size: 23px; }
+  .lyric-translation { font-size: 13px; }
+  .lyric-line.active .lyric-translation { font-size: 14px; }
   .lo-lyrics-inner { padding: 30vw 20px 20px; }
 }
 </style>
